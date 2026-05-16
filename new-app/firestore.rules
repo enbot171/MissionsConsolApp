@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Admin";
+    }
+
+    function isLeaderOrAdmin() {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["Leader", "Admin"];
+    }
+
+    match /users/{uid} {
+      allow read: if isAuth();
+      allow create: if isLeaderOrAdmin();
+      allow update: if isAuth() && (request.auth.uid == uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /teams/{teamId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /people/{personId} {
+      allow read, write: if isAuth();
+    }
+
+    match /cgs/{cgId} {
+      allow read, write: if isAuth();
+    }
+
+    match /coreTeams/{teamId} {
+      allow read: if isAuth();
+      allow write: if isLeaderOrAdmin();
+    }
+
+    match /attendance/{recordId} {
+      allow read, write: if isAuth();
+    }
+  }
+}
