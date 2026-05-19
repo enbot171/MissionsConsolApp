@@ -97,6 +97,15 @@ export const deletePerson = async (id) => {
   await deleteDoc(doc(db, "people", id));
 };
 
+export const getPeopleByTeam = async (teamId) => {
+  const q = query(collection(db, "people"), where("teamId", "==", teamId));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((p) => !p.archived)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+};
+
 export const getPeopleByAssignee = async (uid) => {
   const q = query(
     collection(db, "people"),

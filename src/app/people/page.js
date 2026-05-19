@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPeopleByAssignee, getArchivedByAssignee } from "@/lib/firestore";
 import PageShell from "@/components/PageShell";
 import PersonCard from "@/components/PersonCard";
 import SearchBar from "@/components/SearchBar";
 import { CONTACT_ROLES, CONTACT_TYPES, SOURCES } from "@/config/app";
-import { FiSliders } from "react-icons/fi";
+import { FiSliders, FiGrid } from "react-icons/fi";
 
 const ROLE_COLORS = {
   Contact: "bg-blue-500",
@@ -45,6 +46,7 @@ function FilterSelect({ label, value, onChange, options }) {
 
 export default function People() {
   const { user, loading } = useRequireAuth();
+  const router = useRouter();
   const [people, setPeople] = useState([]);
   const [archived, setArchived] = useState([]);
   const [fetching, setFetching] = useState(true);
@@ -98,7 +100,18 @@ export default function People() {
   });
 
   return (
-    <PageShell title="My People">
+    <PageShell
+      title="My People"
+      rightAction={
+        <button
+          onClick={() => router.push("/bulk-edit")}
+          className="flex flex-col items-center text-gray-600 active:opacity-70"
+        >
+          <FiGrid size={18} />
+          <span className="text-[10px] font-semibold mt-0.5">Bulk Edit</span>
+        </button>
+      }
+    >
       {/* Search + filter toggle */}
       <div className="flex gap-2 mb-3 items-start">
         <div className="flex-1">
