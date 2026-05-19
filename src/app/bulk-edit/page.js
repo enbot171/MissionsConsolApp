@@ -4,41 +4,93 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPeopleByTeam, getCGsByTeam, getUsersByTeam, updatePerson, addPerson } from "@/lib/firestore";
-import { CONTACT_TYPES, SOURCES } from "@/config/app";
+import { CONTACT_TYPES, SOURCES, MILESTONES } from "@/config/app";
 import { FiArrowLeft, FiPlus } from "react-icons/fi";
 
-const COLUMNS = [
-  { key: "name",         label: "Name *",      type: "text",   width: 160, required: true },
-  { key: "contactType",  label: "Type",         type: "select", options: CONTACT_TYPES, width: 110 },
-  { key: "contact",      label: "Contact *",    type: "text",   width: 150, required: true },
-  { key: "source",       label: "Source",       type: "select", options: SOURCES, width: 110 },
-  { key: "age",          label: "Age",          type: "number", width: 65 },
-  { key: "address",      label: "Address",      type: "text",   width: 200 },
-  { key: "metAt",        label: "Met At",       type: "text",   width: 130 },
-  { key: "cgId",         label: "CG",           type: "cg",     width: 140 },
-  { key: "assignedTo",   label: "Assigned To",  type: "user",   width: 140 },
-  { key: "gospelShared", label: "Gospel",       type: "bool",   width: 65 },
-  { key: "prayed",       label: "Prayed",       type: "bool",   width: 65 },
-  { key: "saved",        label: "Saved",        type: "bool",   width: 65 },
+// Column groups shown in a top header band
+const GROUPS = [
+  { label: "Basic Info",       span: 9 },
+  { label: "Notes",            span: 2 },
+  { label: "Roles",            span: 4 },
+  { label: "Status",           span: 3 },
+  { label: "Milestones",       span: MILESTONES.length },
 ];
+
+const COLUMNS = [
+  // ── Basic Info ──────────────────────────────────────────────────────────────
+  { key: "name",         label: "Name *",     type: "text",      width: 155, required: true },
+  { key: "contactType",  label: "Type",        type: "select",    options: CONTACT_TYPES, width: 105 },
+  { key: "contact",      label: "Contact *",   type: "text",      width: 145, required: true },
+  { key: "source",       label: "Source",      type: "select",    options: SOURCES, width: 105 },
+  { key: "age",          label: "Age",         type: "number",    width: 60 },
+  { key: "address",      label: "Address",     type: "text",      width: 185 },
+  { key: "metAt",        label: "Met At",      type: "text",      width: 120 },
+  { key: "cgId",         label: "CG",          type: "cg",        width: 130 },
+  { key: "assignedTo",   label: "Assigned To", type: "user",      width: 130 },
+  // ── Notes ───────────────────────────────────────────────────────────────────
+  { key: "description",      label: "Remarks",          type: "text", width: 175 },
+  { key: "progressRemarks",  label: "Progress Remarks", type: "text", width: 175 },
+  // ── Roles ───────────────────────────────────────────────────────────────────
+  { key: "roles", subKey: "Contact",    label: "Contact",    type: "role", width: 68 },
+  { key: "roles", subKey: "Disciple",   label: "Disciple",   type: "role", width: 68 },
+  { key: "roles", subKey: "CGL",        label: "CGL",        type: "role", width: 52 },
+  { key: "roles", subKey: "Core Team",  label: "Core Tm",    type: "role", width: 68 },
+  // ── Status ──────────────────────────────────────────────────────────────────
+  { key: "gospelShared", label: "Gospel",  type: "bool", width: 60 },
+  { key: "prayed",       label: "Prayed",  type: "bool", width: 60 },
+  { key: "saved",        label: "Saved",   type: "bool", width: 55 },
+  // ── Milestones ──────────────────────────────────────────────────────────────
+  ...MILESTONES.map((m) => ({ key: "milestones", subKey: m, label: m, type: "milestone", width: Math.max(52, m.length * 8 + 16) })),
+];
+
+const EXCLUSIVE_ROLES = ["Contact", "Disciple"];
 
 let _uid = 0;
 const blankRow = () => ({
   _isNew: true,
   _key: ++_uid,
   name: "", contactType: "", contact: "", source: "",
-  age: null, address: "", metAt: "", cgId: "", assignedTo: "",
+  age: null, address: "", metAt: "", description: "", progressRemarks: "",
+  cgId: "", assignedTo: "",
   gospelShared: false, prayed: false, saved: false,
   roles: ["Contact"], ministries: [], milestones: {},
 });
+
+// Derive value and onChange for any column type
+function getCellValue(col, row) {
+  if (col.type === "role") return (row.roles || []).includes(col.subKey);
+  if (col.type === "milestone") return !!row.milestones?.[col.subKey];
+  return row[col.key];
+}
+
+function applyPastedValue(col, val, row) {
+  // Returns { key, value } — what to pass to updateCell
+  const boolVal = ["yes", "true", "1", "✓", "x"].includes(val.toLowerCase());
+  if (col.type === "bool") return { key: col.key, value: boolVal };
+  if (col.type === "role") {
+    let roles = [...(row.roles || [])];
+    if (boolVal) {
+      if (EXCLUSIVE_ROLES.includes(col.subKey)) roles = roles.filter((r) => !EXCLUSIVE_ROLES.includes(r));
+      if (!roles.includes(col.subKey)) roles.push(col.subKey);
+    } else {
+      roles = roles.filter((r) => r !== col.subKey);
+    }
+    return { key: "roles", value: roles };
+  }
+  if (col.type === "milestone") {
+    return { key: "milestones", value: { ...(row.milestones || {}), [col.subKey]: boolVal } };
+  }
+  if (col.type === "number") return { key: col.key, value: val ? parseInt(val) || null : null };
+  return { key: col.key, value: val };
+}
 
 export default function BulkEdit() {
   const { loading: authLoading, profile, user } = useRequireAuth();
   const router = useRouter();
 
   const [rows, setRows] = useState([]);
-  const [dirty, setDirty] = useState(new Set());      // indices of rows with any change
-  const [errors, setErrors] = useState(new Set());    // indices failing validation
+  const [dirty, setDirty] = useState(new Set());
+  const [errors, setErrors] = useState(new Set());
   const [cgs, setCgs] = useState([]);
   const [users, setUsers] = useState([]);
   const [fetching, setFetching] = useState(true);
@@ -62,26 +114,35 @@ export default function BulkEdit() {
     });
   }, [profile?.teamId]);
 
-  const markDirty = useCallback((ri) => {
-    setDirty((prev) => new Set([...prev, ri]));
-    setErrors((prev) => { const n = new Set(prev); n.delete(ri); return n; });
-  }, []);
-
   const updateCell = useCallback((ri, key, value) => {
     setRows((prev) => {
       const next = [...prev];
       next[ri] = { ...next[ri], [key]: value };
       return next;
     });
-    markDirty(ri);
-  }, [markDirty]);
+    setDirty((prev) => new Set([...prev, ri]));
+    setErrors((prev) => { const n = new Set(prev); n.delete(ri); return n; });
+  }, []);
+
+  // Role toggle with Contact/Disciple mutual exclusivity
+  const toggleRole = useCallback((ri, roleName, currentRoles) => {
+    const roles = [...(currentRoles || [])];
+    if (roles.includes(roleName)) {
+      updateCell(ri, "roles", roles.filter((r) => r !== roleName));
+    } else {
+      const next = EXCLUSIVE_ROLES.includes(roleName)
+        ? [...roles.filter((r) => !EXCLUSIVE_ROLES.includes(r)), roleName]
+        : [...roles, roleName];
+      updateCell(ri, "roles", next);
+    }
+  }, [updateCell]);
 
   const handleAddRows = () => {
     const count = Math.min(100, Math.max(1, addCount || 1));
     setRows((prev) => [...prev, ...Array.from({ length: count }, blankRow)]);
   };
 
-  // Global paste — multi-row from Google Sheets
+  // Global paste from Google Sheets
   useEffect(() => {
     const onPaste = (e) => {
       if (focusedCell === null) return;
@@ -98,34 +159,28 @@ export default function BulkEdit() {
           const rowIndex = startRow + ri;
           if (rowIndex >= next.length) return;
           const cells = pasteRow.split("\t");
-          const updated = { ...next[rowIndex] };
+          let updated = { ...next[rowIndex] };
           cells.forEach((raw, ci) => {
             const colIndex = startCol + ci;
             if (colIndex >= COLUMNS.length) return;
             const col = COLUMNS[colIndex];
-            let val = raw.trim();
-            if (col.type === "bool") {
-              val = ["yes", "true", "1", "✓", "x"].includes(val.toLowerCase());
-            } else if (col.type === "number") {
-              val = val ? parseInt(val) || null : null;
-            } else if (col.type === "cg") {
+            const val = raw.trim();
+            if (col.type === "cg") {
               const m = cgs.find((c) => c.name.toLowerCase() === val.toLowerCase());
-              val = m ? m.id : "";
+              updated = { ...updated, cgId: m ? m.id : "" };
             } else if (col.type === "user") {
               const m = users.find((u) => u.name.toLowerCase() === val.toLowerCase());
-              val = m ? m.id : "";
+              updated = { ...updated, assignedTo: m ? m.id : "" };
+            } else {
+              const { key, value } = applyPastedValue(col, val, updated);
+              updated = { ...updated, [key]: value };
             }
-            updated[col.key] = val;
           });
           next[rowIndex] = updated;
           newDirty.add(rowIndex);
         });
         setDirty((prev) => new Set([...prev, ...newDirty]));
-        setErrors((prev) => {
-          const n = new Set(prev);
-          newDirty.forEach((i) => n.delete(i));
-          return n;
-        });
+        setErrors((prev) => { const n = new Set(prev); newDirty.forEach((i) => n.delete(i)); return n; });
         return next;
       });
     };
@@ -134,7 +189,6 @@ export default function BulkEdit() {
   }, [focusedCell, cgs, users]);
 
   const handleSaveAll = async () => {
-    // Validate: any row that's dirty or new-with-content must have name + contact
     const newErrors = new Set();
     rows.forEach((row, i) => {
       const hasContent = row._isNew
@@ -144,10 +198,7 @@ export default function BulkEdit() {
       if (!row.name?.trim()) newErrors.add(i);
       if (!row.contact?.trim()) newErrors.add(i);
     });
-    if (newErrors.size > 0) {
-      setErrors(newErrors);
-      return;
-    }
+    if (newErrors.size > 0) { setErrors(newErrors); return; }
 
     setSaving(true);
     setSaveError("");
@@ -155,22 +206,13 @@ export default function BulkEdit() {
       const ops = rows.map((row, i) => {
         if (row._isNew && row.name?.trim() && row.contact?.trim()) {
           const { _isNew, _key, ...data } = row;
-          return addPerson({
-            ...data,
-            assignedTo: user.uid,
-            assignedToName: profile?.name || "",
-            teamId: profile?.teamId || "",
-          });
+          return addPerson({ ...data, assignedTo: user.uid, assignedToName: profile?.name || "", teamId: profile?.teamId || "" });
         }
-        if (!row._isNew && dirty.has(i)) {
-          return updatePerson(row.id, row);
-        }
+        if (!row._isNew && dirty.has(i)) return updatePerson(row.id, row);
         return null;
       }).filter(Boolean);
 
       await Promise.all(ops);
-
-      // Refresh from Firestore to get real IDs on new rows
       const people = await getPeopleByTeam(profile.teamId);
       setRows(people);
       setDirty(new Set());
@@ -206,19 +248,14 @@ export default function BulkEdit() {
         >
           <FiArrowLeft size={16} />
         </button>
-
         <h1 className="font-bold text-gray-900 text-base">Bulk Edit</h1>
         <span className="text-xs text-gray-400 font-medium">{rows.filter((r) => !r._isNew).length} people</span>
-
         <div className="flex-1" />
 
-        {/* Add rows */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">Add rows:</span>
           <input
-            type="number"
-            min={1}
-            max={100}
+            type="number" min={1} max={100}
             value={addCount}
             onChange={(e) => setAddCount(parseInt(e.target.value) || 1)}
             className="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center outline-none focus:border-blue-400 bg-gray-50"
@@ -231,10 +268,9 @@ export default function BulkEdit() {
           </button>
         </div>
 
-        {/* Feedback */}
         {saveError && <span className="text-sm text-red-500 font-medium">{saveError}</span>}
         {errors.size > 0 && !saveError && (
-          <span className="text-sm text-red-500 font-medium">{errors.size} row{errors.size > 1 ? "s" : ""} missing Name or Contact</span>
+          <span className="text-sm text-red-500 font-medium">{errors.size} row{errors.size > 1 ? "s" : ""} missing Name / Contact</span>
         )}
         {savedMsg && <span className="text-sm text-emerald-600 font-semibold">Saved!</span>}
 
@@ -247,29 +283,46 @@ export default function BulkEdit() {
         </button>
       </div>
 
-      {/* ── Hint bar ── */}
-      <div className="px-5 py-1.5 bg-blue-50 border-b border-blue-100 text-xs text-blue-700 shrink-0 flex gap-4">
+      {/* ── Hint ── */}
+      <div className="px-5 py-1.5 bg-blue-50 border-b border-blue-100 text-xs text-blue-700 shrink-0 flex gap-5">
         <span>Click a cell → paste from Google Sheets to bulk fill.</span>
         <span><span className="font-semibold text-amber-600">Amber</span> = edited</span>
-        <span><span className="font-semibold text-green-600">Green</span> = new row</span>
-        <span><span className="font-semibold text-red-500">Red</span> = missing required field</span>
+        <span><span className="font-semibold text-green-600">Green</span> = new</span>
+        <span><span className="font-semibold text-red-500">Red</span> = missing required</span>
       </div>
 
       {/* ── Table ── */}
       <div className="flex-1 overflow-auto">
-        <table className="text-sm border-collapse" style={{ minWidth: COLUMNS.reduce((a, c) => a + c.width, 0) + 48, width: "100%" }}>
+        <table className="text-sm border-collapse" style={{ minWidth: COLUMNS.reduce((a, c) => a + c.width, 0) + 48 }}>
           <thead className="sticky top-0 z-10">
-            <tr className="bg-gray-100 border-b-2 border-gray-300">
-              <th className="w-12 px-2 py-2.5 text-xs font-semibold text-gray-400 border-r border-gray-300 text-center sticky left-0 bg-gray-100 z-20">#</th>
-              {COLUMNS.map((col) => (
+            {/* Group row */}
+            <tr className="bg-gray-200 border-b border-gray-300">
+              <th className="w-12 border-r border-gray-300 sticky left-0 bg-gray-200 z-20" />
+              {GROUPS.map((g, gi) => (
                 <th
-                  key={col.key}
-                  className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 border-r border-gray-200 whitespace-nowrap"
-                  style={{ width: col.width, minWidth: col.width }}
+                  key={gi}
+                  colSpan={g.span}
+                  className="px-3 py-1 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider border-r-2 border-gray-300"
                 >
-                  {col.label}
+                  {g.label}
                 </th>
               ))}
+            </tr>
+            {/* Column header row */}
+            <tr className="bg-gray-100 border-b-2 border-gray-300">
+              <th className="w-12 px-2 py-2 text-xs font-semibold text-gray-400 border-r border-gray-300 text-center sticky left-0 bg-gray-100 z-20">#</th>
+              {COLUMNS.map((col, ci) => {
+                const isGroupEnd = isLastInGroup(ci);
+                return (
+                  <th
+                    key={`${col.key}-${col.subKey ?? ci}`}
+                    className={`px-2 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap ${isGroupEnd ? "border-r-2 border-gray-300" : "border-r border-gray-200"}`}
+                    style={{ width: col.width, minWidth: col.width }}
+                  >
+                    {col.label}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -284,35 +337,40 @@ export default function BulkEdit() {
               const isNew = row._isNew;
               const isDirty = dirty.has(ri) && !isNew;
               const hasError = errors.has(ri);
-              const rowCls = hasError
-                ? "bg-red-50"
-                : isNew
-                  ? "bg-green-50"
-                  : isDirty
-                    ? "bg-amber-50"
-                    : "bg-white hover:bg-gray-50";
+              const bgBase = hasError ? "bg-red-50" : isNew ? "bg-green-50" : isDirty ? "bg-amber-50" : "bg-white hover:bg-gray-50";
 
               return (
-                <tr key={row.id || row._key} className={`border-b border-gray-100 ${rowCls}`}>
+                <tr key={row.id || row._key} className={`border-b border-gray-100 ${bgBase}`}>
                   <td className={`px-2 py-0 text-xs text-gray-400 border-r border-gray-200 text-center w-12 sticky left-0 z-10 ${hasError ? "bg-red-50" : isNew ? "bg-green-50" : isDirty ? "bg-amber-50" : "bg-white"}`}>
                     {ri + 1}
                   </td>
                   {COLUMNS.map((col, ci) => {
                     const isFocused = focusedCell?.row === ri && focusedCell?.col === ci;
+                    const isGroupEnd = isLastInGroup(ci);
                     const isErrCell = hasError && col.required;
+                    const cellValue = getCellValue(col, row);
+
                     return (
                       <td
-                        key={col.key}
-                        className={`border-r border-gray-100 p-0 ${isFocused ? "ring-2 ring-inset ring-blue-400" : ""} ${isErrCell && !isFocused ? "ring-1 ring-inset ring-red-300" : ""}`}
+                        key={`${col.key}-${col.subKey ?? ci}`}
+                        className={`p-0 ${isGroupEnd ? "border-r-2 border-gray-300" : "border-r border-gray-100"} ${isFocused ? "ring-2 ring-inset ring-blue-400" : ""} ${isErrCell && !isFocused ? "ring-1 ring-inset ring-red-300" : ""}`}
                         style={{ width: col.width, minWidth: col.width }}
                       >
                         <CellInput
                           col={col}
-                          value={row[col.key]}
+                          value={cellValue}
                           cgs={cgs}
                           users={users}
                           onFocus={() => setFocusedCell({ row: ri, col: ci })}
-                          onChange={(v) => updateCell(ri, col.key, v)}
+                          onChange={(v) => {
+                            if (col.type === "role") {
+                              toggleRole(ri, col.subKey, row.roles);
+                            } else if (col.type === "milestone") {
+                              updateCell(ri, "milestones", { ...(row.milestones || {}), [col.subKey]: v });
+                            } else {
+                              updateCell(ri, col.key, v);
+                            }
+                          }}
                         />
                       </td>
                     );
@@ -327,10 +385,21 @@ export default function BulkEdit() {
   );
 }
 
-const cellCls = "w-full h-full px-3 py-2 bg-transparent outline-none text-gray-900 text-sm leading-tight";
+// Returns true if column ci is the last column in its group
+function isLastInGroup(ci) {
+  let cum = 0;
+  for (const g of GROUPS) {
+    cum += g.span;
+    if (ci === cum - 1) return true;
+    if (ci < cum) return false;
+  }
+  return false;
+}
+
+const cellCls = "w-full h-full px-2 py-2 bg-transparent outline-none text-gray-900 text-sm leading-tight";
 
 function CellInput({ col, value, cgs, users, onFocus, onChange }) {
-  if (col.type === "bool") {
+  if (col.type === "bool" || col.type === "role" || col.type === "milestone") {
     return (
       <div className="flex items-center justify-center h-8">
         <input
