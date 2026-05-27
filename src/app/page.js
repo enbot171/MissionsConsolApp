@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getPeopleByAssignee, getUsersByTeam, getNoContactByAssignee, getNoContactByTeam } from "@/lib/firestore";
+import { getPeopleByAssignee, getPeopleByTeam, getNoContactByAssignee, getNoContactByTeam } from "@/lib/firestore";
 import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import Spinner from "@/components/Spinner";
@@ -79,22 +79,16 @@ export default function Dashboard() {
     if (!user) return;
     setStatsLoading(true);
     const fetchAll = async () => {
-      const [mine, myNC, teamUsers] = await Promise.all([
+      const [mine, myNC, team, teamNC] = await Promise.all([
         getPeopleByAssignee(user.uid),
         getNoContactByAssignee(user.uid),
-        profile?.teamId ? getUsersByTeam(profile.teamId) : Promise.resolve([]),
+        profile?.teamId ? getPeopleByTeam(profile.teamId) : Promise.resolve([]),
+        profile?.teamId ? getNoContactByTeam(profile.teamId) : Promise.resolve([]),
       ]);
       setMyPeople(mine);
       setMyNoContact(myNC);
-      if (teamUsers.length > 0) {
-        const [allSets, teamNC] = await Promise.all([
-          Promise.all(teamUsers.map((u) => getPeopleByAssignee(u.id))),
-          profile?.teamId ? getNoContactByTeam(profile.teamId) : Promise.resolve([]),
-        ]);
-        const deduped = [...new Map(allSets.flat().map((p) => [p.id, p])).values()];
-        setTeamPeople(deduped);
-        setTeamNoContact(teamNC);
-      }
+      setTeamPeople(team);
+      setTeamNoContact(teamNC);
     };
     fetchAll().finally(() => setStatsLoading(false));
   }, [user, profile?.teamId]);
