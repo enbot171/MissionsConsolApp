@@ -37,16 +37,20 @@ function countTalkedTo(contacts, noContact, period) {
   return all.filter((p) => { const d = toDate(p.createdAt); return d && d >= start; }).length;
 }
 
-function computeStats(people, period) {
+function computeStats(people, period, noContact = []) {
   const start = getPeriodStart(period);
   const filtered = start
     ? people.filter((p) => { const d = toDate(p.createdAt); return d && d >= start; })
     : people;
+  const filteredNC = start
+    ? noContact.filter((p) => { const d = toDate(p.createdAt); return d && d >= start; })
+    : noContact;
+  const all = [...filtered, ...filteredNC];
   return {
     contacts: filtered.length,
-    gospelShared: filtered.filter((p) => p.gospelShared).length,
-    prayedFor: filtered.filter((p) => p.prayed).length,
-    salvations: filtered.filter((p) => p.saved).length,
+    gospelShared: all.filter((p) => p.gospelShared).length,
+    prayedFor: all.filter((p) => p.prayed).length,
+    salvations: all.filter((p) => p.saved).length,
   };
 }
 
@@ -97,8 +101,8 @@ export default function Dashboard() {
 
   if (loading) return <Spinner fullScreen />;
 
-  const myStats = statsLoading ? null : computeStats(myPeople, period);
-  const teamStats = statsLoading ? null : computeStats(teamPeople, period);
+  const myStats = statsLoading ? null : computeStats(myPeople, period, myNoContact);
+  const teamStats = statsLoading ? null : computeStats(teamPeople, period, teamNoContact);
 
   const myDisciples = statsLoading ? null : myPeople.filter((p) => (p.roles || []).includes("Disciple")).length;
   const teamDisciples = statsLoading ? null : teamPeople.filter((p) => (p.roles || []).includes("Disciple")).length;
