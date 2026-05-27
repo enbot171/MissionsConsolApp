@@ -108,16 +108,19 @@ export const getPeopleByTeam = async (teamId) => {
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 };
 
-export const getNoContactByAssignee = async (uid) => {
-  const q = query(collection(db, "people"), where("assignedTo", "==", uid));
+// Returns { people, noContact } from a single Firestore query — avoids reading team docs twice.
+export const getTeamPeopleAndNoContact = async (teamId) => {
+  const q = query(collection(db, "people"), where("teamId", "==", teamId));
   const snap = await getDocs(q);
-  return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .filter((p) => p.noContact === true);
+  const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return {
+    people: docs.filter((p) => !p.archived && !p.noContact),
+    noContact: docs.filter((p) => p.noContact === true),
+  };
 };
 
-export const getNoContactByTeam = async (teamId) => {
-  const q = query(collection(db, "people"), where("teamId", "==", teamId));
+export const getNoContactByAssignee = async (uid) => {
+  const q = query(collection(db, "people"), where("assignedTo", "==", uid));
   const snap = await getDocs(q);
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getPeopleByAssignee, getPeopleByTeam, getNoContactByAssignee, getNoContactByTeam } from "@/lib/firestore";
+import { getPeopleByAssignee, getTeamPeopleAndNoContact, getNoContactByAssignee } from "@/lib/firestore";
 import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import Spinner from "@/components/Spinner";
@@ -79,16 +79,17 @@ export default function Dashboard() {
     if (!user) return;
     setStatsLoading(true);
     const fetchAll = async () => {
-      const [mine, myNC, team, teamNC] = await Promise.all([
+      const [mine, myNC, teamResult] = await Promise.all([
         getPeopleByAssignee(user.uid),
         getNoContactByAssignee(user.uid),
-        profile?.teamId ? getPeopleByTeam(profile.teamId) : Promise.resolve([]),
-        profile?.teamId ? getNoContactByTeam(profile.teamId) : Promise.resolve([]),
+        profile?.teamId
+          ? getTeamPeopleAndNoContact(profile.teamId)
+          : Promise.resolve({ people: [], noContact: [] }),
       ]);
       setMyPeople(mine);
       setMyNoContact(myNC);
-      setTeamPeople(team);
-      setTeamNoContact(teamNC);
+      setTeamPeople(teamResult.people);
+      setTeamNoContact(teamResult.noContact);
     };
     fetchAll().finally(() => setStatsLoading(false));
   }, [user, profile?.teamId]);
