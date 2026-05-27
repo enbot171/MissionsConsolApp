@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPeopleByAssignee, getUsersByTeam, getNoContactByAssignee, getNoContactByTeam } from "@/lib/firestore";
 import BottomNav from "@/components/BottomNav";
+import SideNav from "@/components/SideNav";
 import Spinner from "@/components/Spinner";
 
 const PERIODS = ["Daily", "Weekly", "All Time"];
@@ -48,11 +49,11 @@ function computeStats(people, period) {
   };
 }
 
-function StatCard({ label, value, border, text, loading }) {
+function StatCard({ label, value, loading }) {
   return (
-    <div className={`bg-white rounded-2xl border-2 ${border} p-4`}>
-      <p className="text-gray-600 text-xs font-medium leading-tight">{label}</p>
-      <p className={`${text} text-3xl font-bold mt-1`}>{loading ? "—" : value}</p>
+    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+      <p className="text-gray-500 text-xs font-medium leading-tight">{label}</p>
+      <p className="text-gray-900 text-3xl font-bold mt-1">{loading ? "—" : value ?? "—"}</p>
     </div>
   );
 }
@@ -104,80 +105,85 @@ export default function Dashboard() {
   const teamTalkedTo = statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period);
 
   const myMetrics = [
-    { label: "Talked To", value: myTalkedTo, border: "border-violet-400", text: "text-violet-600" },
-    { label: "Contacts Made", value: myStats?.contacts, border: "border-blue-400", text: "text-blue-600" },
-    { label: "Gospel Shared", value: myStats?.gospelShared, border: "border-indigo-400", text: "text-indigo-600" },
-    { label: "Prayed For", value: myStats?.prayedFor, border: "border-emerald-400", text: "text-emerald-600" },
-    { label: "Salvations", value: myStats?.salvations, border: "border-amber-400", text: "text-amber-600" },
-    { label: "Active Disciples", value: myDisciples, border: "border-emerald-400", text: "text-emerald-600" },
+    { label: "Talked To",       value: myTalkedTo },
+    { label: "Contacts Made",   value: myStats?.contacts },
+    { label: "Gospel Shared",   value: myStats?.gospelShared },
+    { label: "Prayed For",      value: myStats?.prayedFor },
+    { label: "Salvations",      value: myStats?.salvations },
+    { label: "Active Disciples",value: myDisciples },
   ];
 
   const teamMetrics = [
-    { label: "Talked To", value: teamTalkedTo, border: "border-violet-400", text: "text-violet-600" },
-    { label: "Contacts Made", value: teamStats?.contacts, border: "border-blue-400", text: "text-blue-600" },
-    { label: "Gospel Shared", value: teamStats?.gospelShared, border: "border-indigo-400", text: "text-indigo-600" },
-    { label: "Prayed For", value: teamStats?.prayedFor, border: "border-emerald-400", text: "text-emerald-600" },
-    { label: "Salvations", value: teamStats?.salvations, border: "border-amber-400", text: "text-amber-600" },
-    { label: "Active Disciples", value: teamDisciples, border: "border-emerald-400", text: "text-emerald-600" },
-    { label: "Active Core Team", value: teamCoreTeam, border: "border-orange-400", text: "text-orange-600" },
+    { label: "Talked To",        value: teamTalkedTo },
+    { label: "Contacts Made",    value: teamStats?.contacts },
+    { label: "Gospel Shared",    value: teamStats?.gospelShared },
+    { label: "Prayed For",       value: teamStats?.prayedFor },
+    { label: "Salvations",       value: teamStats?.salvations },
+    { label: "Active Disciples", value: teamDisciples },
+    { label: "Active Core Team", value: teamCoreTeam },
   ];
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
-      <div className="bg-linear-to-br from-blue-600 to-indigo-700 px-5 pt-12 pb-8">
-        <div className="max-w-lg mx-auto">
-          <p className="text-blue-200 text-sm font-medium">Welcome back</p>
-          <h1 className="text-white text-2xl font-bold tracking-tight mt-0.5">
-            {profile?.name || "—"}
-          </h1>
-          <span className="inline-block mt-2 text-xs bg-white/20 text-white px-2.5 py-1 rounded-full font-medium">
-            {profile?.role || "Member"}
-          </span>
+    <div className="flex min-h-screen bg-slate-50">
+      <SideNav />
+
+      <div className="flex-1 flex flex-col md:ml-60">
+        {/* Hero header */}
+        <div className="bg-linear-to-br from-blue-600 to-indigo-700 px-5 pt-12 pb-8">
+          <div className="max-w-lg mx-auto md:max-w-3xl">
+            <p className="text-blue-200 text-sm font-medium">Welcome back</p>
+            <h1 className="text-white text-2xl font-bold tracking-tight mt-0.5">
+              {profile?.name || "—"}
+            </h1>
+            <span className="inline-block mt-2 text-xs bg-white/20 text-white px-2.5 py-1 rounded-full font-medium">
+              {profile?.role || "Member"}
+            </span>
+          </div>
         </div>
+
+        <main className="flex-1 pb-24 md:pb-10 -mt-4">
+          <div className="px-4 max-w-lg mx-auto md:max-w-3xl space-y-4">
+
+            {/* Period selector */}
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+              {PERIODS.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                    period === p ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+
+            {/* My Stats */}
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">My Stats</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {myMetrics.map((m) => (
+                <StatCard key={m.label} {...m} loading={statsLoading} />
+              ))}
+            </div>
+
+            {/* Team Stats */}
+            {profile?.teamId && (
+              <>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-1">Team Stats</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {teamMetrics.map((m) => (
+                    <StatCard key={m.label} {...m} loading={statsLoading} />
+                  ))}
+                </div>
+              </>
+            )}
+
+          </div>
+        </main>
+
+        <BottomNav />
       </div>
-
-      <main className="flex-1 pb-24 -mt-4">
-        <div className="px-4 max-w-lg mx-auto space-y-4">
-
-          {/* Period selector */}
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-            {PERIODS.map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  period === p ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-
-          {/* My Stats */}
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">My Stats</p>
-          <div className="grid grid-cols-2 gap-3">
-            {myMetrics.map((m) => (
-              <StatCard key={m.label} {...m} loading={statsLoading} />
-            ))}
-          </div>
-
-          {/* Team Stats */}
-          {profile?.teamId && (
-            <>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-1">Team Stats</p>
-              <div className="grid grid-cols-2 gap-3">
-                {teamMetrics.map((m) => (
-                  <StatCard key={m.label} {...m} loading={statsLoading} />
-                ))}
-              </div>
-            </>
-          )}
-
-        </div>
-      </main>
-
-      <BottomNav />
     </div>
   );
 }
