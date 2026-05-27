@@ -50,9 +50,9 @@ function computeStats(people, period) {
   };
 }
 
-function StatCard({ label, value, loading }) {
+function StatCard({ label, value, border, loading }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+    <div className={`bg-white rounded-2xl border-2 ${border} p-4 shadow-sm`}>
       <p className="text-gray-700 text-sm font-bold leading-tight">{label}</p>
       <p className="text-gray-900 text-3xl font-bold mt-1">{loading ? "—" : value ?? "—"}</p>
     </div>
@@ -108,22 +108,22 @@ export default function Dashboard() {
   const teamTalkedTo = statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period);
 
   const myMetrics = [
-    { label: "Talked To",       value: myTalkedTo },
-    { label: "Contacts Made",   value: myStats?.contacts },
-    { label: "Gospel Shared",   value: myStats?.gospelShared },
-    { label: "Prayed For",      value: myStats?.prayedFor },
-    { label: "Salvations",      value: myStats?.salvations },
-    { label: "Active Disciples",value: myDisciples },
+    { label: "Talked To",        value: myTalkedTo,           border: "border-violet-600" },
+    { label: "Contacts Made",    value: myStats?.contacts,    border: "border-blue-600" },
+    { label: "Gospel Shared",    value: myStats?.gospelShared,border: "border-indigo-600" },
+    { label: "Prayed For",       value: myStats?.prayedFor,   border: "border-teal-600" },
+    { label: "Salvations",       value: myStats?.salvations,  border: "border-amber-600" },
+    { label: "Active Disciples", value: myDisciples,          border: "border-emerald-700" },
   ];
 
   const teamMetrics = [
-    { label: "Talked To",        value: teamTalkedTo },
-    { label: "Contacts Made",    value: teamStats?.contacts },
-    { label: "Gospel Shared",    value: teamStats?.gospelShared },
-    { label: "Prayed For",       value: teamStats?.prayedFor },
-    { label: "Salvations",       value: teamStats?.salvations },
-    { label: "Active Disciples", value: teamDisciples },
-    { label: "Active Core Team", value: teamCoreTeam },
+    { label: "Talked To",        value: teamTalkedTo,          border: "border-violet-600" },
+    { label: "Contacts Made",    value: teamStats?.contacts,   border: "border-blue-600" },
+    { label: "Gospel Shared",    value: teamStats?.gospelShared,border: "border-indigo-600" },
+    { label: "Prayed For",       value: teamStats?.prayedFor,  border: "border-teal-600" },
+    { label: "Salvations",       value: teamStats?.salvations, border: "border-amber-600" },
+    { label: "Active Disciples", value: teamDisciples,         border: "border-emerald-700" },
+    { label: "Active Core Team", value: teamCoreTeam,          border: "border-orange-700" },
   ];
 
   return (
@@ -163,7 +163,7 @@ export default function Dashboard() {
             </div>
 
             {/* My Stats */}
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">My Stats</p>
+            <p className="text-lg font-bold text-gray-800">My Stats</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {myMetrics.map((m) => (
                 <StatCard key={m.label} {...m} loading={statsLoading} />
@@ -173,7 +173,7 @@ export default function Dashboard() {
             {/* Team Stats */}
             {profile?.teamId && (
               <>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-1">Team Stats</p>
+                <p className="text-lg font-bold text-gray-800 pt-1">Team Stats</p>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {teamMetrics.map((m) => (
                     <StatCard key={m.label} {...m} loading={statsLoading} />
