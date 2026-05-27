@@ -39,8 +39,20 @@ export default function SideNav() {
         </button>
       </div>
 
+      {/* Add Contact CTA */}
+      <div className="px-2 pt-3 pb-1">
+        <button
+          onClick={() => router.push("/add-contact")}
+          title={collapsed ? "Add Contact" : undefined}
+          className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
+        >
+          <FaPlus size={13} className="shrink-0" />
+          {!collapsed && <span>Add Contact</span>}
+        </button>
+      </div>
+
       {/* Nav items */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5">
+      <nav className="flex-1 px-2 py-2 space-y-0.5">
         {tabs.map(({ path, icon: Icon, label }) => {
           const active = path === "/" ? pathname === "/" : pathname.startsWith(path);
           return (
@@ -58,18 +70,6 @@ export default function SideNav() {
           );
         })}
       </nav>
-
-      {/* Add Contact CTA */}
-      <div className="px-2 pb-5">
-        <button
-          onClick={() => router.push("/add-contact")}
-          title={collapsed ? "Add Contact" : undefined}
-          className={`w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors`}
-        >
-          <FaPlus size={13} className="shrink-0" />
-          {!collapsed && <span>Add Contact</span>}
-        </button>
-      </div>
     </aside>
   );
 }
