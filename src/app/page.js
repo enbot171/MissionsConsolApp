@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPeopleByAssignee, getTeamPeopleAndNoContact, getNoContactByAssignee } from "@/lib/firestore";
 import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import Spinner from "@/components/Spinner";
 import { useSidebar } from "@/context/SidebarContext";
+import { FiClipboard } from "react-icons/fi";
 
 const PERIODS = ["Daily", "Weekly", "All Time"];
 
@@ -67,6 +69,7 @@ function StatCard({ label, value, border, loading }) {
 export default function Dashboard() {
   const { user, profile, loading } = useRequireAuth();
   const { collapsed } = useSidebar();
+  const router = useRouter();
   const ml = collapsed ? "md:ml-16" : "md:ml-60";
   const [myPeople, setMyPeople] = useState([]);
   const [teamPeople, setTeamPeople] = useState([]);
@@ -145,6 +148,18 @@ export default function Dashboard() {
 
         <main className="flex-1 pb-24 md:pb-10 -mt-4">
           <div className="px-4 max-w-lg mx-auto md:max-w-3xl space-y-4">
+
+            {/* Daily Summary shortcut */}
+            <button
+              onClick={() => router.push("/summary")}
+              className="w-full flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+                <FiClipboard className="text-indigo-600" size={15} />
+              </div>
+              <span className="flex-1 text-left text-sm font-semibold text-gray-800">Daily Summary</span>
+              <span className="text-gray-300 text-sm">›</span>
+            </button>
 
             {/* Period selector */}
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">

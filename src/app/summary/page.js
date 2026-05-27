@@ -1,0 +1,137 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
+import { getPeopleByAssignee, getNoContactByAssignee } from "@/lib/firestore";
+import PageShell from "@/components/PageShell";
+
+function toDate(val) {
+  if (!val) return null;
+  if (val.toDate) return val.toDate();
+  return new Date(val);
+}
+
+function isSameDay(val, dateStr) {
+  const d = toDate(val);
+  if (!d) return false;
+  return d.toISOString().split("T")[0] === dateStr;
+}
+
+export default function Summary() {
+  const { user, loading } = useRequireAuth();
+  const [people, setPeople] = useState([]);
+  const [noContact, setNoContact] = useState([]);
+  const [fetching, setFetching] = useState(true);
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+
+  useEffect(() => {
+    if (!user) return;
+    setFetching(true);
+    Promise.all([
+      getPeopleByAssignee(user.uid),
+      getNoContactByAssignee(user.uid),
+    ]).then(([p, nc]) => {
+      setPeople(p);
+      setNoContact(nc);
+      setFetching(false);
+    });
+  }, [user]);
+
+  if (loading) return null;
+
+  const dayPeople = people.filter((p) => isSameDay(p.createdAt, date));
+  const dayNoContact = noContact.filter((p) => isSameDay(p.createdAt, date));
+  const all = [...dayPeople, ...dayNoContact];
+
+  const stats = {
+    talkedTo: all.length,
+    gospelShared: all.filter((p) => p.gospelShared).length,
+    prayed: all.filter((p) => p.prayed).length,
+    saved: all.filter((p) => p.saved).length,
+  };
+
+  return (
+    <PageShell
+      title="Daily Summary"
+      rightAction={
+        <input
+          type="date"
+          value={date}
+          max={new Date().toISOString().split("T")[0]}
+          onChange={(e) => setDate(e.target.value)}
+          className="text-sm border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 min-w-0"
+        />
+      }
+    >
+      <div className="space-y-4">
+        {/* Stats row */}
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { label: "Talked To",  value: stats.talkedTo,     color: "text-violet-600" },
+            { label: "Gospel",     value: stats.gospelShared, color: "text-indigo-600" },
+            { label: "Prayed",     value: stats.prayed,       color: "text-teal-600"   },
+            { label: "Saved",      value: stats.saved,        color: "text-amber-600"  },
+          ].map((s) => (
+            <div key={s.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 text-center">
+              <p className={`text-2xl font-bold ${s.color}`}>{fetching ? "—" : s.value}</p>
+              <p className="text-xs text-gray-500 font-semibold mt-0.5">{s.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* People list */}
+        {fetching ? (
+          <p className="text-center text-gray-400 text-sm py-8">Loading…</p>
+        ) : all.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+            <p className="text-gray-400 text-sm">No people recorded for this date.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {all.map((person) => (
+              <PersonRow key={person.id} person={person} />
+            ))}
+          </div>
+        )}
+      </div>
+    </PageShell>
+  );
+}
+
+function PersonRow({ person }) {
+  const isNoContact = person.noContact === true;
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-bold text-gray-900 text-sm">{person.name}</p>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+              isNoContact ? "bg-gray-100 text-gray-500" : "bg-blue-50 text-blue-600"
+            }`}>
+              {isNoContact ? "No Contact" : "Contact"}
+            </span>
+          </div>
+          {person.metAt && (
+            <p className="text-xs text-gray-400 mt-1">{person.metAt}</p>
+          )}
+          {person.description && (
+            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{person.description}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1 shrink-0 items-end">
+          {person.gospelShared && <Badge label="Gospel" color="bg-indigo-100 text-indigo-700" />}
+          {person.prayed        && <Badge label="Prayed" color="bg-teal-100 text-teal-700"    />}
+          {person.saved         && <Badge label="Saved"  color="bg-amber-100 text-amber-700"  />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Badge({ label, color }) {
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${color}`}>{label}</span>
+  );
+}

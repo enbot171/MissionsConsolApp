@@ -3,13 +3,14 @@
 import { useRouter, usePathname } from "next/navigation";
 import { FaHome, FaPlus, FaUsers, FaLayerGroup } from "react-icons/fa";
 import { HiMenu } from "react-icons/hi";
-import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiClipboard } from "react-icons/fi";
 import { useSidebar } from "@/context/SidebarContext";
 
 const tabs = [
   { path: "/",        icon: FaHome,       label: "Home" },
   { path: "/people",  icon: FaUsers,      label: "People" },
   { path: "/groups",  icon: FaLayerGroup, label: "Groups" },
+  { path: "/summary", icon: FiClipboard,  label: "Summary" },
   { path: "/settings",icon: HiMenu,       label: "Settings" },
 ];
 
