@@ -5,11 +5,11 @@ import { FaHome, FaPlus, FaUsers, FaLayerGroup } from "react-icons/fa";
 import { HiMenu } from "react-icons/hi";
 
 const tabs = [
-  { path: "/", icon: FaHome, label: "Home" },
-  { path: "/people", icon: FaUsers, label: "People" },
-  { path: "/add-contact", icon: FaPlus, label: null, fab: true },
-  { path: "/groups", icon: FaLayerGroup, label: "Groups" },
-  { path: "/settings", icon: HiMenu, label: "Settings" },
+  { path: "/",           icon: FaHome,       label: "Home" },
+  { path: "/add-contact",icon: FaPlus,       label: null, fab: true },
+  { path: "/people",     icon: FaUsers,      label: "People" },
+  { path: "/groups",     icon: FaLayerGroup, label: "Groups" },
+  { path: "/settings",   icon: HiMenu,       label: "Settings" },
 ];
 
 export default function BottomNav() {

@@ -4,17 +4,21 @@ import BottomNav from "./BottomNav";
 import SideNav from "./SideNav";
 import { useRouter } from "next/navigation";
 import { FiChevronLeft } from "react-icons/fi";
+import { useSidebar } from "@/context/SidebarContext";
 
 export default function PageShell({ title, rightAction, children, backHref }) {
   const router = useRouter();
+  const { collapsed } = useSidebar();
+  const ml = collapsed ? "md:ml-16" : "md:ml-60";
+  const left = collapsed ? "md:left-16" : "md:left-60";
 
   return (
     <div className="flex min-h-screen bg-slate-50">
       <SideNav />
 
-      <div className="flex-1 flex flex-col md:ml-60">
+      <div className={`flex-1 flex flex-col transition-all duration-200 ${ml}`}>
         {/* Header */}
-        <div className="fixed top-0 right-0 left-0 md:left-60 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200/60">
+        <div className={`fixed top-0 right-0 left-0 ${left} z-10 bg-white/80 backdrop-blur-md border-b border-gray-200/60 transition-all duration-200`}>
           <div className="flex items-center justify-between px-4 h-14">
             <div className="flex items-center gap-2">
               {backHref && (

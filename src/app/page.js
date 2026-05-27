@@ -6,6 +6,7 @@ import { getPeopleByAssignee, getUsersByTeam, getNoContactByAssignee, getNoConta
 import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import Spinner from "@/components/Spinner";
+import { useSidebar } from "@/context/SidebarContext";
 
 const PERIODS = ["Daily", "Weekly", "All Time"];
 
@@ -52,7 +53,7 @@ function computeStats(people, period) {
 function StatCard({ label, value, loading }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-      <p className="text-gray-500 text-xs font-medium leading-tight">{label}</p>
+      <p className="text-gray-700 text-sm font-bold leading-tight">{label}</p>
       <p className="text-gray-900 text-3xl font-bold mt-1">{loading ? "—" : value ?? "—"}</p>
     </div>
   );
@@ -61,6 +62,8 @@ function StatCard({ label, value, loading }) {
 
 export default function Dashboard() {
   const { user, profile, loading } = useRequireAuth();
+  const { collapsed } = useSidebar();
+  const ml = collapsed ? "md:ml-16" : "md:ml-60";
   const [myPeople, setMyPeople] = useState([]);
   const [teamPeople, setTeamPeople] = useState([]);
   const [myNoContact, setMyNoContact] = useState([]);
@@ -127,7 +130,7 @@ export default function Dashboard() {
     <div className="flex min-h-screen bg-slate-50">
       <SideNav />
 
-      <div className="flex-1 flex flex-col md:ml-60">
+      <div className={`flex-1 flex flex-col transition-all duration-200 ${ml}`}>
         {/* Hero header */}
         <div className="bg-linear-to-br from-blue-600 to-indigo-700 px-5 pt-12 pb-8">
           <div className="max-w-lg mx-auto md:max-w-3xl">
