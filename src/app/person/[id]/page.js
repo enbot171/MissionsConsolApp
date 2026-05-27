@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPerson, updatePerson, getCGsByTeam, getUsersByTeam, getCoreTeamsByTeam } from "@/lib/firestore";
+import { Timestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
 import { FaArchive } from "react-icons/fa";
 import { CONTACT_TYPES, SOURCES, CONTACT_ROLES, MILESTONES } from "@/config/app";
@@ -68,6 +69,9 @@ export default function PersonView() {
         roles: form.roles,
         ministries: form.ministries,
         teamId: profile?.teamId || form.teamId || "",
+        createdAt: form.createdAt instanceof Date
+          ? Timestamp.fromDate(form.createdAt)
+          : form.createdAt,
         // progress
         gospelShared: form.gospelShared,
         prayed: form.prayed,
@@ -188,6 +192,12 @@ const handleArchive = async () => {
             <Field label="Source" value={form.source || ""} onChange={(v) => set("source", v)} select={SOURCES} />
             <Field label="Age" type="number" value={form.age || ""} onChange={(v) => set("age", v ? parseInt(v) : null)} />
             <Field label="Address" value={form.address || ""} onChange={(v) => set("address", v)} />
+            <Field
+              label="Date Met"
+              type="date"
+              value={form.createdAt?.toDate ? form.createdAt.toDate().toISOString().split("T")[0] : form.createdAt instanceof Date ? form.createdAt.toISOString().split("T")[0] : ""}
+              onChange={(v) => set("createdAt", v ? new Date(v) : form.createdAt)}
+            />
             <Field label="Met At" value={form.metAt || ""} onChange={(v) => set("metAt", v)} />
             <Field label="Remarks" value={form.description || ""} onChange={(v) => set("description", v)} textarea />
           </Card>

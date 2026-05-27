@@ -35,6 +35,7 @@ function AddContactInner() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState(prefilledCgId || prefilledMinistry ? "full" : "quick");
 
+
   const [form, setForm] = useState({
     name: "", contactType: "", contact: "", source: "",
     age: "", address: "", gospelShared: false, prayed: false, saved: false,
@@ -42,6 +43,7 @@ function AddContactInner() {
     roles: prefilledMinistry ? ["Core Team"] : ["Contact"],
     ministries: prefilledMinistry ? [prefilledMinistry] : [],
     milestones: {},
+    metOn: new Date().toISOString().split("T")[0],
   });
 
   useEffect(() => {
@@ -69,19 +71,38 @@ function AddContactInner() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim()) return setError("Name is required.");
-    if (!form.contact.trim()) return setError("Contact info is required.");
     setSaving(true); setError("");
     try {
+      if (tab === "no-contact") {
+        if (!form.name.trim()) { setError("Name is required."); setSaving(false); return; }
+        await addPerson({
+          name: form.name.trim(),
+          description: form.description,
+          createdAt: form.metOn || null,
+          noContact: true,
+          archived: true,
+          roles: [],
+          ministries: [],
+          milestones: {},
+          assignedTo: user.uid,
+          assignedToName: profile?.name || "",
+          teamId: profile?.teamId || "",
+        });
+        router.push("/people");
+        return;
+      }
+      if (!form.name.trim()) { setError("Name is required."); setSaving(false); return; }
+      if (!form.contact.trim()) { setError("Contact info is required."); setSaving(false); return; }
       const id = await addPerson({
         ...form,
         age: form.age ? parseInt(form.age) : null,
         assignedTo: user.uid,
         assignedToName: profile?.name || "",
         teamId: profile?.teamId || "",
+        createdAt: form.metOn || null,
       });
       router.push(`/person/${id}`);
-    } catch { setError("Failed to add contact. Try again."); }
+    } catch { setError("Failed to save. Try again."); }
     setSaving(false);
   };
 
@@ -93,11 +114,11 @@ function AddContactInner() {
 
         {/* Tab toggle */}
         <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-          {[["quick", "Quick"], ["full", "Full"]].map(([val, label]) => (
+          {[["quick", "Quick"], ["full", "Full"], ["no-contact", "No Contact"]].map(([val, label]) => (
             <button
               key={val}
               type="button"
-              onClick={() => setTab(val)}
+              onClick={() => { setTab(val); setError(""); }}
               className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                 tab === val ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"
               }`}
@@ -114,6 +135,7 @@ function AddContactInner() {
               <Field label="Name *" value={form.name} onChange={(v) => set("name", v)} placeholder="Full name" />
               <Field label="Contact Type" value={form.contactType} onChange={(v) => set("contactType", v)} select={CONTACT_TYPES} placeholder="Select type" />
               <Field label="Contact Info *" value={form.contact} onChange={(v) => set("contact", v)} placeholder="Handle / number" />
+              <Field label="Date Met" type="date" value={form.metOn} onChange={(v) => set("metOn", v)} />
               <Field label="Met At" value={form.metAt} onChange={(v) => set("metAt", v)} placeholder="Where you met" />
               <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
             </Card>
@@ -140,6 +162,7 @@ function AddContactInner() {
               <Field label="Source" value={form.source} onChange={(v) => set("source", v)} select={SOURCES} placeholder="Select source" />
               <Field label="Age" type="number" value={form.age} onChange={(v) => set("age", v)} placeholder="Age" />
               <Field label="Address" value={form.address} onChange={(v) => set("address", v)} placeholder="Address" />
+              <Field label="Date Met" type="date" value={form.metOn} onChange={(v) => set("metOn", v)} />
               <Field label="Met At" value={form.metAt} onChange={(v) => set("metAt", v)} placeholder="Where you met" />
               <Field label="CG" value={form.cgId} onChange={(v) => set("cgId", v)}
                 select={cgs.map((c) => ({ value: c.id, label: c.name }))} placeholder="No CG" />
@@ -211,6 +234,16 @@ function AddContactInner() {
           </>
         )}
 
+        {/* ── NO CONTACT TAB ── */}
+        {tab === "no-contact" && (
+          <Card>
+            <p className="text-xs text-gray-500">For people you spoke to but didn't get contact info from.</p>
+            <Field label="Name *" value={form.name} onChange={(v) => set("name", v)} placeholder="Full name" />
+            <Field label="Date Met" type="date" value={form.metOn} onChange={(v) => set("metOn", v)} />
+            <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
+          </Card>
+        )}
+
         {error && (
           <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
             <p className="text-red-600 text-sm text-center">{error}</p>
@@ -222,7 +255,7 @@ function AddContactInner() {
           disabled={saving}
           className="w-full py-3.5 bg-linear-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 hover:opacity-90 disabled:opacity-50 transition-opacity"
         >
-          {saving ? "Adding…" : "Add Contact"}
+          {saving ? "Saving…" : tab === "no-contact" ? "Save (No Contact)" : "Add Contact"}
         </button>
       </form>
     </PageShell>

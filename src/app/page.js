@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getPeopleByAssignee, getUsersByTeam } from "@/lib/firestore";
+import { getPeopleByAssignee, getUsersByTeam, getNoContactByAssignee, getNoContactByTeam } from "@/lib/firestore";
 import BottomNav from "@/components/BottomNav";
 import Spinner from "@/components/Spinner";
 
@@ -26,6 +26,13 @@ function toDate(val) {
   if (!val) return null;
   if (val.toDate) return val.toDate();
   return new Date(val);
+}
+
+function countTalkedTo(contacts, noContact, period) {
+  const start = getPeriodStart(period);
+  const all = [...contacts, ...noContact];
+  if (!start) return all.length;
+  return all.filter((p) => { const d = toDate(p.createdAt); return d && d >= start; }).length;
 }
 
 function computeStats(people, period) {
@@ -63,25 +70,33 @@ export default function Dashboard() {
   const { user, profile, loading } = useRequireAuth();
   const [myPeople, setMyPeople] = useState([]);
   const [teamPeople, setTeamPeople] = useState([]);
+  const [myNoContact, setMyNoContact] = useState([]);
+  const [teamNoContact, setTeamNoContact] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [period, setPeriod] = useState("Weekly");
 
   useEffect(() => {
     if (!user) return;
     setStatsLoading(true);
-    const fetchTeam = async () => {
-      const [mine, teamUsers] = await Promise.all([
+    const fetchAll = async () => {
+      const [mine, myNC, teamUsers] = await Promise.all([
         getPeopleByAssignee(user.uid),
+        getNoContactByAssignee(user.uid),
         profile?.teamId ? getUsersByTeam(profile.teamId) : Promise.resolve([]),
       ]);
       setMyPeople(mine);
+      setMyNoContact(myNC);
       if (teamUsers.length > 0) {
-        const allSets = await Promise.all(teamUsers.map((u) => getPeopleByAssignee(u.id)));
+        const [allSets, teamNC] = await Promise.all([
+          Promise.all(teamUsers.map((u) => getPeopleByAssignee(u.id))),
+          profile?.teamId ? getNoContactByTeam(profile.teamId) : Promise.resolve([]),
+        ]);
         const deduped = [...new Map(allSets.flat().map((p) => [p.id, p])).values()];
         setTeamPeople(deduped);
+        setTeamNoContact(teamNC);
       }
     };
-    fetchTeam().finally(() => setStatsLoading(false));
+    fetchAll().finally(() => setStatsLoading(false));
   }, [user, profile?.teamId]);
 
   if (loading) return <Spinner fullScreen />;
@@ -146,6 +161,7 @@ export default function Dashboard() {
               <StatCard key={m.label} {...m} loading={statsLoading} />
             ))}
           </div>
+          <CountBadge label="Talked To (incl. no contact)" value={statsLoading ? null : countTalkedTo(myPeople, myNoContact, period)} loading={statsLoading} />
           <CountBadge label="Active Disciples" value={myDisciples} loading={statsLoading} />
 
           {/* Team Stats */}
@@ -157,6 +173,7 @@ export default function Dashboard() {
                   <StatCard key={m.label} {...m} loading={statsLoading} />
                 ))}
               </div>
+              <CountBadge label="Talked To (incl. no contact)" value={statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period)} loading={statsLoading} />
               <CountBadge label="Active Disciples" value={teamDisciples} loading={statsLoading} />
               <CountBadge label="Active Core Team" value={teamCoreTeam} loading={statsLoading} />
             </>

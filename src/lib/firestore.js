@@ -76,10 +76,12 @@ export const deleteTeam = async (id) => {
 // ── People ────────────────────────────────────────────────────────────────────
 
 export const addPerson = async (data) => {
+  const { createdAt: providedDate, ...rest } = data;
   const ref = await addDoc(collection(db, "people"), {
-    ...data,
-    createdAt: serverTimestamp(),
-    metOn: data.metOn || serverTimestamp(),
+    ...rest,
+    createdAt: providedDate
+      ? Timestamp.fromDate(new Date(providedDate))
+      : serverTimestamp(),
   });
   return ref.id;
 };
@@ -104,6 +106,22 @@ export const getPeopleByTeam = async (teamId) => {
     .map((d) => ({ id: d.id, ...d.data() }))
     .filter((p) => !p.archived)
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+};
+
+export const getNoContactByAssignee = async (uid) => {
+  const q = query(collection(db, "people"), where("assignedTo", "==", uid));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((p) => p.noContact === true);
+};
+
+export const getNoContactByTeam = async (teamId) => {
+  const q = query(collection(db, "people"), where("teamId", "==", teamId));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((p) => p.noContact === true);
 };
 
 export const getPeopleByAssignee = async (uid) => {
