@@ -79,6 +79,9 @@ function AddContactInner() {
           name: form.name.trim(),
           description: form.description,
           createdAt: form.metOn || null,
+          gospelShared: form.gospelShared,
+          prayed: form.prayed,
+          saved: form.saved,
           noContact: true,
           archived: true,
           roles: [],
@@ -236,12 +239,24 @@ function AddContactInner() {
 
         {/* ── NO CONTACT TAB ── */}
         {tab === "no-contact" && (
-          <Card>
-            <p className="text-xs text-gray-500">For people you spoke to but didn't get contact info from.</p>
-            <Field label="Name *" value={form.name} onChange={(v) => set("name", v)} placeholder="Full name" />
-            <Field label="Date Met" type="date" value={form.metOn} onChange={(v) => set("metOn", v)} />
-            <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
-          </Card>
+          <>
+            <Card>
+              <p className="text-xs text-gray-500">For people you spoke to but didn't get contact info from.</p>
+              <Field label="Name *" value={form.name} onChange={(v) => set("name", v)} placeholder="Full name" />
+              <Field label="Date Met" type="date" value={form.metOn} onChange={(v) => set("metOn", v)} />
+              <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
+            </Card>
+
+            <Card title="Status">
+              {[
+                { key: "gospelShared", label: "Gospel Shared" },
+                { key: "prayed", label: "Prayed" },
+                { key: "saved", label: "Saved" },
+              ].map(({ key, label }) => (
+                <StatusRow key={key} label={label} checked={form[key]} onToggle={() => set(key, !form[key])} />
+              ))}
+            </Card>
+          </>
         )}
 
         {error && (
@@ -271,11 +286,11 @@ function Card({ title, children }) {
   );
 }
 
-const inputCls = "w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white transition-colors";
+const inputCls = "w-full min-w-0 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white transition-colors";
 
 function Field({ label, value, onChange, type = "text", select, placeholder, textarea }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 min-w-0 overflow-hidden">
       <label className="text-xs font-semibold text-gray-700">{label}</label>
       {textarea ? (
         <textarea value={value ?? ""} onChange={(e) => onChange(e.target.value)} rows={3} placeholder={placeholder} className={`${inputCls} resize-none`} />
