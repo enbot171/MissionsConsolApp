@@ -23,10 +23,11 @@ export default function Summary() {
   if (loading) return null;
 
   const stats = {
-    talkedTo: all.length,
+    talkedTo:     all.length,
+    contacts:     all.filter((p) => !p.noContact).length,
     gospelShared: all.filter((p) => p.gospelShared).length,
-    prayed: all.filter((p) => p.prayed).length,
-    saved: all.filter((p) => p.saved).length,
+    prayed:       all.filter((p) => p.prayed).length,
+    saved:        all.filter((p) => p.saved).length,
   };
 
   return (
@@ -44,12 +45,13 @@ export default function Summary() {
     >
       <div className="space-y-4">
         {/* Stats row */}
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
           {[
-            { label: "Talked To",  value: stats.talkedTo,     color: "text-violet-600" },
-            { label: "Gospel",     value: stats.gospelShared, color: "text-indigo-600" },
-            { label: "Prayed",     value: stats.prayed,       color: "text-teal-600"   },
-            { label: "Saved",      value: stats.saved,        color: "text-amber-600"  },
+            { label: "Talked To", value: stats.talkedTo,     color: "text-violet-600" },
+            { label: "Contacts",  value: stats.contacts,     color: "text-blue-600"   },
+            { label: "Gospel",    value: stats.gospelShared, color: "text-indigo-600" },
+            { label: "Prayed",    value: stats.prayed,       color: "text-teal-600"   },
+            { label: "Saved",     value: stats.saved,        color: "text-amber-600"  },
           ].map((s) => (
             <div key={s.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 text-center">
               <p className={`text-2xl font-bold ${s.color}`}>{fetching ? "—" : s.value}</p>
@@ -91,12 +93,16 @@ function PersonRow({ person }) {
               {isNoContact ? "No Contact" : "Contact"}
             </span>
           </div>
-          {person.metAt && (
-            <p className="text-xs text-gray-400 mt-1">{person.metAt}</p>
-          )}
-          {person.description && (
-            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{person.description}</p>
-          )}
+          <div className="mt-2 space-y-1">
+            <div className="flex gap-1.5">
+              <span className="text-xs font-semibold text-gray-400 shrink-0">Met At</span>
+              <span className="text-xs text-gray-600">{person.metAt || "—"}</span>
+            </div>
+            <div className="flex gap-1.5">
+              <span className="text-xs font-semibold text-gray-400 shrink-0">Notes</span>
+              <span className="text-xs text-gray-600 line-clamp-2">{person.description || "—"}</span>
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-col gap-1 shrink-0 items-end">
