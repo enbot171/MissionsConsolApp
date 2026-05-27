@@ -127,6 +127,21 @@ export const getNoContactByAssignee = async (uid) => {
     .filter((p) => p.noContact === true);
 };
 
+export const getPeopleByAssigneeAndDate = async (uid, dateStr) => {
+  const start = new Date(dateStr);
+  const end = new Date(dateStr);
+  end.setDate(end.getDate() + 1);
+  const q = query(
+    collection(db, "people"),
+    where("assignedTo", "==", uid),
+    where("createdAt", ">=", Timestamp.fromDate(start)),
+    where("createdAt", "<", Timestamp.fromDate(end)),
+    orderBy("createdAt", "desc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
 export const getPeopleByAssignee = async (uid) => {
   const q = query(
     collection(db, "people"),

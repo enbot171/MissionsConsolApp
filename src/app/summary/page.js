@@ -2,46 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getPeopleByAssignee, getNoContactByAssignee } from "@/lib/firestore";
+import { getPeopleByAssigneeAndDate } from "@/lib/firestore";
 import PageShell from "@/components/PageShell";
-
-function toDate(val) {
-  if (!val) return null;
-  if (val.toDate) return val.toDate();
-  return new Date(val);
-}
-
-function isSameDay(val, dateStr) {
-  const d = toDate(val);
-  if (!d) return false;
-  return d.toISOString().split("T")[0] === dateStr;
-}
 
 export default function Summary() {
   const { user, loading } = useRequireAuth();
-  const [people, setPeople] = useState([]);
-  const [noContact, setNoContact] = useState([]);
+  const [all, setAll] = useState([]);
   const [fetching, setFetching] = useState(true);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
     if (!user) return;
     setFetching(true);
-    Promise.all([
-      getPeopleByAssignee(user.uid),
-      getNoContactByAssignee(user.uid),
-    ]).then(([p, nc]) => {
-      setPeople(p);
-      setNoContact(nc);
+    getPeopleByAssigneeAndDate(user.uid, date).then((records) => {
+      setAll(records);
       setFetching(false);
     });
-  }, [user]);
+  }, [user, date]);
 
   if (loading) return null;
-
-  const dayPeople = people.filter((p) => isSameDay(p.createdAt, date));
-  const dayNoContact = noContact.filter((p) => isSameDay(p.createdAt, date));
-  const all = [...dayPeople, ...dayNoContact];
 
   const stats = {
     talkedTo: all.length,
