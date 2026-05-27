@@ -57,14 +57,6 @@ function StatCard({ label, value, border, text, loading }) {
   );
 }
 
-function CountBadge({ label, value, loading }) {
-  return (
-    <div className="flex items-center justify-between bg-white rounded-2xl border border-gray-200 px-4 py-3">
-      <span className="text-sm font-medium text-gray-700">{label}</span>
-      <span className="text-xl font-bold text-gray-900">{loading ? "—" : value}</span>
-    </div>
-  );
-}
 
 export default function Dashboard() {
   const { user, profile, loading } = useRequireAuth();
@@ -104,22 +96,30 @@ export default function Dashboard() {
   const myStats = statsLoading ? null : computeStats(myPeople, period);
   const teamStats = statsLoading ? null : computeStats(teamPeople, period);
 
-  const myDisciples = myPeople.filter((p) => (p.roles || []).includes("Disciple")).length;
-  const teamDisciples = teamPeople.filter((p) => (p.roles || []).includes("Disciple")).length;
-  const teamCoreTeam = teamPeople.filter((p) => (p.roles || []).includes("Core Team")).length;
+  const myDisciples = statsLoading ? null : myPeople.filter((p) => (p.roles || []).includes("Disciple")).length;
+  const teamDisciples = statsLoading ? null : teamPeople.filter((p) => (p.roles || []).includes("Disciple")).length;
+  const teamCoreTeam = statsLoading ? null : teamPeople.filter((p) => (p.roles || []).includes("Core Team")).length;
+
+  const myTalkedTo = statsLoading ? null : countTalkedTo(myPeople, myNoContact, period);
+  const teamTalkedTo = statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period);
 
   const myMetrics = [
+    { label: "Talked To", value: myTalkedTo, border: "border-violet-400", text: "text-violet-600" },
     { label: "Contacts Made", value: myStats?.contacts, border: "border-blue-400", text: "text-blue-600" },
     { label: "Gospel Shared", value: myStats?.gospelShared, border: "border-indigo-400", text: "text-indigo-600" },
     { label: "Prayed For", value: myStats?.prayedFor, border: "border-emerald-400", text: "text-emerald-600" },
     { label: "Salvations", value: myStats?.salvations, border: "border-amber-400", text: "text-amber-600" },
+    { label: "Active Disciples", value: myDisciples, border: "border-emerald-400", text: "text-emerald-600" },
   ];
 
   const teamMetrics = [
+    { label: "Talked To", value: teamTalkedTo, border: "border-violet-400", text: "text-violet-600" },
     { label: "Contacts Made", value: teamStats?.contacts, border: "border-blue-400", text: "text-blue-600" },
     { label: "Gospel Shared", value: teamStats?.gospelShared, border: "border-indigo-400", text: "text-indigo-600" },
     { label: "Prayed For", value: teamStats?.prayedFor, border: "border-emerald-400", text: "text-emerald-600" },
     { label: "Salvations", value: teamStats?.salvations, border: "border-amber-400", text: "text-amber-600" },
+    { label: "Active Disciples", value: teamDisciples, border: "border-emerald-400", text: "text-emerald-600" },
+    { label: "Active Core Team", value: teamCoreTeam, border: "border-orange-400", text: "text-orange-600" },
   ];
 
   return (
@@ -161,8 +161,6 @@ export default function Dashboard() {
               <StatCard key={m.label} {...m} loading={statsLoading} />
             ))}
           </div>
-          <CountBadge label="Talked To (incl. no contact)" value={statsLoading ? null : countTalkedTo(myPeople, myNoContact, period)} loading={statsLoading} />
-          <CountBadge label="Active Disciples" value={myDisciples} loading={statsLoading} />
 
           {/* Team Stats */}
           {profile?.teamId && (
@@ -173,9 +171,6 @@ export default function Dashboard() {
                   <StatCard key={m.label} {...m} loading={statsLoading} />
                 ))}
               </div>
-              <CountBadge label="Talked To (incl. no contact)" value={statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period)} loading={statsLoading} />
-              <CountBadge label="Active Disciples" value={teamDisciples} loading={statsLoading} />
-              <CountBadge label="Active Core Team" value={teamCoreTeam} loading={statsLoading} />
             </>
           )}
 
