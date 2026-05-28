@@ -24,18 +24,19 @@ function daysSince(date) {
   return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function getOverduePeople(people, followUpDays) {
+function getOverduePeople(people, globalFollowUpDays) {
   return people
     .filter((p) => {
       if (p.noContact) return false;
       const ref = getRefDate(p);
       if (!ref) return false;
-      return daysSince(ref) >= followUpDays;
+      const interval = p.followUpDays ?? globalFollowUpDays;
+      return daysSince(ref) >= interval;
     })
     .sort((a, b) => {
-      const dA = daysSince(getRefDate(a));
-      const dB = daysSince(getRefDate(b));
-      return dB - dA;
+      const intervalA = a.followUpDays ?? globalFollowUpDays;
+      const intervalB = b.followUpDays ?? globalFollowUpDays;
+      return (daysSince(getRefDate(b)) - intervalB) - (daysSince(getRefDate(a)) - intervalA);
     });
 }
 
@@ -263,28 +264,27 @@ export default function Dashboard() {
                 <div className="space-y-2">
                   {overduePeople.slice(0, 5).map((p) => {
                     const ref = getRefDate(p);
-                    const days = ref ? daysSince(ref) - followUpDays : 0;
+                    const interval = p.followUpDays ?? followUpDays;
+                    const days = ref ? daysSince(ref) - interval : 0;
+                    const isTexting = texting.has(p.id);
                     return (
                       <div key={p.id} className="bg-white rounded-xl border border-rose-100 shadow-sm px-4 py-3 flex items-center gap-3">
-                        <div
-                          onClick={() => router.push(`/person/${p.id}`)}
-                          className="w-8 h-8 rounded-xl bg-linear-to-br from-blue-400 to-indigo-500 flex items-center justify-center shrink-0 cursor-pointer"
+                        {/* Checkbox */}
+                        <button
+                          onClick={() => handleTexted(p)}
+                          disabled={isTexting}
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 ${
+                            isTexting ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"
+                          }`}
                         >
-                          <span className="text-xs font-bold text-white">{p.name?.charAt(0).toUpperCase() || "?"}</span>
-                        </div>
+                          {isTexting && <FiCheck size={11} className="text-white" />}
+                        </button>
                         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/person/${p.id}`)}>
                           <p className="text-sm font-semibold text-gray-900 truncate">{p.name}</p>
                           <p className="text-xs text-rose-500 font-semibold">
                             {days === 0 ? "Due today" : `${days}d overdue`}
                           </p>
                         </div>
-                        <button
-                          onClick={() => handleTexted(p)}
-                          disabled={texting.has(p.id)}
-                          className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100 disabled:opacity-50 transition-colors"
-                        >
-                          <FiCheck size={12} /> Texted
-                        </button>
                       </div>
                     );
                   })}

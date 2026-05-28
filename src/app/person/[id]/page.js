@@ -78,6 +78,8 @@ export default function PersonView() {
         saved: form.saved,
         milestones: form.milestones || {},
         progressRemarks: form.progressRemarks || "",
+        // follow-up
+        ...(form.followUpDays != null ? { followUpDays: parseInt(form.followUpDays) || null } : {}),
         // network
         cgId: form.cgId,
         assignedTo: form.assignedTo,
@@ -200,6 +202,13 @@ export default function PersonView() {
             />
             <Field label="Met At" value={form.metAt || ""} onChange={(v) => set("metAt", v)} />
             <Field label="Remarks" value={form.description || ""} onChange={(v) => set("description", v)} textarea />
+            <Field
+              label="Follow-up every (days)"
+              type="number"
+              value={form.followUpDays ?? ""}
+              onChange={(v) => set("followUpDays", v === "" ? null : parseInt(v) || null)}
+              placeholder="Use global default"
+            />
             {form.lastFollowedUpAt && (
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-700">Last Followed Up</label>

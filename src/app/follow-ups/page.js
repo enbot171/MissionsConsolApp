@@ -6,7 +6,7 @@ import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPeopleByAssignee, updatePerson } from "@/lib/firestore";
 import { serverTimestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
-import { FiCheck } from "react-icons/fi";
+import { FiArchive, FiCheck } from "react-icons/fi";
 
 const DEFAULT_FOLLOW_UP_DAYS = 3;
 
@@ -21,10 +21,11 @@ function getRefDate(person) {
   return null;
 }
 
-function computeDaysUntilDue(person, followUpDays) {
+function computeDaysUntilDue(person, globalFollowUpDays) {
   const ref = getRefDate(person);
   if (!ref) return null;
-  return followUpDays - daysSince(ref);
+  const interval = person.followUpDays ?? globalFollowUpDays;
+  return interval - daysSince(ref);
 }
 
 const roleStyles = {
@@ -39,7 +40,8 @@ export default function FollowUps() {
   const router = useRouter();
   const [people, setPeople] = useState([]);
   const [fetching, setFetching] = useState(true);
-  const [texting, setTexting] = useState(new Set());
+  const [checking, setChecking] = useState(new Set());
+  const [archiving, setArchiving] = useState(new Set());
 
   useEffect(() => {
     if (!user) return;
@@ -51,10 +53,10 @@ export default function FollowUps() {
 
   if (loading) return null;
 
-  const followUpDays = profile?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
+  const globalFollowUpDays = profile?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
 
   const withDue = people
-    .map((p) => ({ ...p, _due: computeDaysUntilDue(p, followUpDays) }))
+    .map((p) => ({ ...p, _due: computeDaysUntilDue(p, globalFollowUpDays) }))
     .filter((p) => p._due !== null);
 
   const overdue = withDue
@@ -65,13 +67,20 @@ export default function FollowUps() {
     .filter((p) => p._due > 0 && p._due <= 7)
     .sort((a, b) => a._due - b._due);
 
-  const handleTexted = async (person) => {
-    setTexting((prev) => new Set([...prev, person.id]));
+  const handleCheck = async (person) => {
+    setChecking((prev) => new Set([...prev, person.id]));
     await updatePerson(person.id, { lastFollowedUpAt: serverTimestamp() });
     setPeople((prev) => prev.map((p) =>
       p.id === person.id ? { ...p, lastFollowedUpAt: { toDate: () => new Date() } } : p
     ));
-    setTexting((prev) => { const n = new Set(prev); n.delete(person.id); return n; });
+    setChecking((prev) => { const n = new Set(prev); n.delete(person.id); return n; });
+  };
+
+  const handleArchive = async (person) => {
+    setArchiving((prev) => new Set([...prev, person.id]));
+    await updatePerson(person.id, { archived: true });
+    setPeople((prev) => prev.filter((p) => p.id !== person.id));
+    setArchiving((prev) => { const n = new Set(prev); n.delete(person.id); return n; });
   };
 
   return (
@@ -98,8 +107,10 @@ export default function FollowUps() {
                   key={p.id}
                   person={p}
                   onNavigate={() => router.push(`/person/${p.id}`)}
-                  onTexted={handleTexted}
-                  isTexting={texting.has(p.id)}
+                  onCheck={handleCheck}
+                  onArchive={handleArchive}
+                  isChecking={checking.has(p.id)}
+                  isArchiving={archiving.has(p.id)}
                 />
               ))}
             </div>
@@ -115,8 +126,10 @@ export default function FollowUps() {
                   key={p.id}
                   person={p}
                   onNavigate={() => router.push(`/person/${p.id}`)}
-                  onTexted={handleTexted}
-                  isTexting={texting.has(p.id)}
+                  onCheck={handleCheck}
+                  onArchive={handleArchive}
+                  isChecking={checking.has(p.id)}
+                  isArchiving={archiving.has(p.id)}
                 />
               ))}
             </div>
@@ -127,22 +140,26 @@ export default function FollowUps() {
   );
 }
 
-function PersonRow({ person, onNavigate, onTexted, isTexting }) {
+function PersonRow({ person, onNavigate, onCheck, onArchive, isChecking, isArchiving }) {
   const due = person._due;
   const isOverdue = due <= 0;
-  const daysOverdue = Math.abs(due);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
-      <div
-        onClick={onNavigate}
-        className="w-11 h-11 rounded-xl bg-linear-to-br from-blue-400 to-indigo-500 flex items-center justify-center shrink-0 shadow-sm cursor-pointer"
+      {/* Checkbox */}
+      <button
+        onClick={() => onCheck(person)}
+        disabled={isChecking || isArchiving}
+        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 ${
+          isChecking
+            ? "bg-emerald-500 border-emerald-500"
+            : "border-gray-300 hover:border-emerald-400"
+        }`}
       >
-        <span className="text-white font-bold text-base">
-          {person.name?.charAt(0).toUpperCase() || "?"}
-        </span>
-      </div>
+        {isChecking && <FiCheck size={11} className="text-white" />}
+      </button>
 
+      {/* Info */}
       <div className="flex-1 min-w-0 cursor-pointer" onClick={onNavigate}>
         <p className="font-semibold text-gray-900 truncate">{person.name}</p>
         <p className="text-sm text-gray-500 truncate">
@@ -157,19 +174,25 @@ function PersonRow({ person, onNavigate, onTexted, isTexting }) {
           ))}
           <span className={`text-[10px] font-semibold ${isOverdue ? "text-rose-500" : "text-amber-500"}`}>
             {isOverdue
-              ? daysOverdue === 0 ? "Due today" : `${daysOverdue}d overdue`
+              ? Math.abs(due) === 0 ? "Due today" : `${Math.abs(due)}d overdue`
               : `Due in ${due}d`}
           </span>
+          {person.followUpDays && (
+            <span className="text-[10px] text-gray-400">· every {person.followUpDays}d</span>
+          )}
         </div>
       </div>
 
+      {/* Archive button */}
       <button
-        onClick={() => onTexted(person)}
-        disabled={isTexting}
-        className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+        onClick={() => onArchive(person)}
+        disabled={isArchiving || isChecking}
+        className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 transition-colors"
+        title="Archive"
       >
-        <FiCheck size={13} />
-        Texted
+        {isArchiving
+          ? <span className="w-3 h-3 rounded-full border border-gray-400 border-t-transparent animate-spin" />
+          : <FiArchive size={13} />}
       </button>
     </div>
   );
