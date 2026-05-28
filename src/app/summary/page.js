@@ -34,6 +34,8 @@ function SummaryInner() {
 
   if (loading) return null;
 
+  const sorted = [...all].sort((a, b) => (a.noContact ? 1 : 0) - (b.noContact ? 1 : 0));
+
   const stats = {
     talkedTo:     all.length,
     contacts:     all.filter((p) => !p.noContact).length,
@@ -81,7 +83,7 @@ function SummaryInner() {
           </div>
         ) : (
           <div className="space-y-2">
-            {all.map((person) => (
+            {sorted.map((person) => (
               <PersonRow key={person.id} person={person} />
             ))}
           </div>
