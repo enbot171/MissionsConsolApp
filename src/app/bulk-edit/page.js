@@ -99,6 +99,8 @@ export default function BulkEdit() {
   const [saveError, setSaveError] = useState("");
   const [focusedCell, setFocusedCell] = useState(null);
   const [addCount, setAddCount] = useState(5);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [archiving, setArchiving] = useState(false);
 
   useEffect(() => {
     if (!profile?.teamId) return;
@@ -136,6 +138,26 @@ export default function BulkEdit() {
       updateCell(ri, "roles", next);
     }
   }, [updateCell]);
+
+  const toggleRowSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkArchive = async () => {
+    if (selectedIds.size === 0) return;
+    setArchiving(true);
+    await Promise.all([...selectedIds].map((id) => updatePerson(id, { archived: true })));
+    const people = await getPeopleByTeam(profile.teamId);
+    setRows(people);
+    setDirty(new Set());
+    setErrors(new Set());
+    setSelectedIds(new Set());
+    setArchiving(false);
+  };
 
   const handleAddRows = () => {
     const count = Math.min(100, Math.max(1, addCount || 1));
@@ -274,6 +296,16 @@ export default function BulkEdit() {
         )}
         {savedMsg && <span className="text-sm text-emerald-600 font-semibold">Saved!</span>}
 
+        {selectedIds.size > 0 && (
+          <button
+            onClick={handleBulkArchive}
+            disabled={archiving}
+            className="px-4 py-1.5 bg-gray-700 hover:bg-gray-800 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
+          >
+            {archiving ? "Archiving…" : `Archive (${selectedIds.size})`}
+          </button>
+        )}
+
         <button
           onClick={handleSaveAll}
           disabled={saving || totalChanges === 0}
@@ -310,7 +342,17 @@ export default function BulkEdit() {
             </tr>
             {/* Column header row */}
             <tr className="bg-gray-100 border-b-2 border-gray-300">
-              <th className="w-12 px-2 py-2 text-xs font-semibold text-gray-400 border-r border-gray-300 text-center sticky left-0 bg-gray-100 z-20">#</th>
+              <th className="w-12 px-2 py-2 text-xs font-semibold text-gray-400 border-r border-gray-300 text-center sticky left-0 bg-gray-100 z-20">
+                <input
+                  type="checkbox"
+                  className="w-3.5 h-3.5 accent-gray-700 cursor-pointer"
+                  checked={selectedIds.size > 0 && rows.filter((r) => !r._isNew).every((r) => selectedIds.has(r.id))}
+                  onChange={(e) => {
+                    const existingIds = rows.filter((r) => !r._isNew).map((r) => r.id);
+                    setSelectedIds(e.target.checked ? new Set(existingIds) : new Set());
+                  }}
+                />
+              </th>
               {COLUMNS.map((col, ci) => {
                 const isGroupEnd = isLastInGroup(ci);
                 return (
@@ -341,8 +383,17 @@ export default function BulkEdit() {
 
               return (
                 <tr key={row.id || row._key} className={`border-b border-gray-100 ${bgBase}`}>
-                  <td className={`px-2 py-0 text-xs text-gray-400 border-r border-gray-200 text-center w-12 sticky left-0 z-10 ${hasError ? "bg-red-50" : isNew ? "bg-green-50" : isDirty ? "bg-amber-50" : "bg-white"}`}>
-                    {ri + 1}
+                  <td className={`px-2 py-0 text-xs text-gray-400 border-r border-gray-200 text-center w-12 sticky left-0 z-10 ${hasError ? "bg-red-50" : isNew ? "bg-green-50" : isDirty ? "bg-amber-50" : selectedIds.has(row.id) ? "bg-gray-100" : "bg-white"}`}>
+                    {!isNew ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(row.id)}
+                        onChange={() => toggleRowSelect(row.id)}
+                        className="w-3.5 h-3.5 accent-gray-700 cursor-pointer"
+                      />
+                    ) : (
+                      <span className="text-gray-300">{ri + 1}</span>
+                    )}
                   </td>
                   {COLUMNS.map((col, ci) => {
                     const isFocused = focusedCell?.row === ri && focusedCell?.col === ci;
