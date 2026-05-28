@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getPeopleByAssignee, getArchivedByAssignee } from "@/lib/firestore";
+import { getPeopleByAssignee, getArchivedByAssignee, updatePerson } from "@/lib/firestore";
 import PageShell from "@/components/PageShell";
 import PersonCard from "@/components/PersonCard";
 import SearchBar from "@/components/SearchBar";
 import { CONTACT_ROLES, CONTACT_TYPES, SOURCES } from "@/config/app";
-import { FiSliders, FiGrid } from "react-icons/fi";
+import { FiSliders, FiGrid, FiCheckSquare } from "react-icons/fi";
 
 const ROLE_COLORS = {
   Contact: "bg-blue-500",
@@ -56,6 +56,9 @@ export default function People() {
   const [showArchived, setShowArchived] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [archiving, setArchiving] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -68,6 +71,26 @@ export default function People() {
   if (loading) return null;
 
   const setFilter = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
+
+  const toggleSelect = (person) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(person.id) ? next.delete(person.id) : next.add(person.id);
+      return next;
+    });
+  };
+
+  const handleBulkArchive = async () => {
+    if (selectedIds.size === 0) return;
+    setArchiving(true);
+    await Promise.all([...selectedIds].map((id) => updatePerson(id, { archived: true })));
+    const [active, arch] = await Promise.all([getPeopleByAssignee(user.uid), getArchivedByAssignee(user.uid)]);
+    setPeople(active);
+    setArchived(arch);
+    setSelectedIds(new Set());
+    setSelectMode(false);
+    setArchiving(false);
+  };
 
   const EXCLUSIVE_ROLES = ["Contact", "Disciple"];
 
@@ -103,13 +126,24 @@ export default function People() {
     <PageShell
       title="My People"
       rightAction={
-        <button
-          onClick={() => router.push("/bulk-edit")}
-          className="flex flex-col items-center text-gray-600 active:opacity-70"
-        >
-          <FiGrid size={18} />
-          <span className="text-[10px] font-semibold mt-0.5">Bulk Edit</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {selectMode ? (
+            <button onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }} className="text-xs font-semibold text-gray-500">
+              Cancel
+            </button>
+          ) : (
+            <>
+              <button onClick={() => router.push("/bulk-edit")} className="flex flex-col items-center text-gray-600 active:opacity-70">
+                <FiGrid size={18} />
+                <span className="text-[10px] font-semibold mt-0.5">Bulk Edit</span>
+              </button>
+              <button onClick={() => setSelectMode(true)} className="flex flex-col items-center text-gray-600 active:opacity-70">
+                <FiCheckSquare size={18} />
+                <span className="text-[10px] font-semibold mt-0.5">Select</span>
+              </button>
+            </>
+          )}
+        </div>
       }
     >
       {/* Search + filter toggle */}
@@ -219,7 +253,27 @@ export default function People() {
         </p>
       ) : (
         <div className="space-y-2.5">
-          {filtered.map((p) => <PersonCard key={p.id} person={p} />)}
+          {filtered.map((p) => (
+            <PersonCard
+              key={p.id}
+              person={p}
+              onSelect={selectMode ? toggleSelect : undefined}
+              selected={selectedIds.has(p.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Bulk archive action bar */}
+      {selectMode && (
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-40">
+          <button
+            onClick={handleBulkArchive}
+            disabled={selectedIds.size === 0 || archiving}
+            className="flex items-center gap-2 px-6 py-3 bg-gray-800 disabled:opacity-40 text-white text-sm font-semibold rounded-2xl shadow-xl transition-opacity"
+          >
+            {archiving ? "Archiving…" : `Archive ${selectedIds.size > 0 ? `(${selectedIds.size})` : ""}`}
+          </button>
         </div>
       )}
     </PageShell>

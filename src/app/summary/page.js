@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useSearchParams } from "next/navigation";
-import { getPeopleByAssigneeAndDate, getMeetupsByAssignee } from "@/lib/firestore";
+import { getPeopleByAssigneeAndDate, getMeetupsByAssignee, updateMeetup } from "@/lib/firestore";
 import PageShell from "@/components/PageShell";
 
 function toLocalDateStr(ts) {
@@ -56,6 +56,12 @@ function SummaryInner() {
 
   const sorted = [...all].sort((a, b) => (a.noContact ? 1 : 0) - (b.noContact ? 1 : 0));
   const dayMeetups = allMeetups.filter((m) => toLocalDateStr(m.date) === date);
+  const isPastDate = date < new Date().toISOString().split("T")[0];
+
+  const confirmMeetup = async (id, completed) => {
+    await updateMeetup(id, { completed });
+    setAllMeetups((prev) => prev.map((m) => m.id === id ? { ...m, completed } : m));
+  };
 
   const stats = {
     talkedTo:     all.length,
@@ -63,7 +69,7 @@ function SummaryInner() {
     gospelShared: all.filter((p) => p.gospelShared).length,
     prayed:       all.filter((p) => p.prayed).length,
     saved:        all.filter((p) => p.saved).length,
-    meetups:      dayMeetups.length,
+    meetups:      dayMeetups.filter((m) => m.completed === true).length,
   };
 
   return (
@@ -121,7 +127,7 @@ function SummaryInner() {
                   Meetups <span className="text-gray-400 font-semibold text-base">({dayMeetups.length})</span>
                 </p>
                 {dayMeetups.map((m) => (
-                  <MeetupRow key={m.id} meetup={m} formatTime={formatTime} />
+                  <MeetupRow key={m.id} meetup={m} formatTime={formatTime} isPast={isPastDate} onConfirm={confirmMeetup} />
                 ))}
               </div>
             )}
@@ -173,16 +179,21 @@ function PersonRow({ person }) {
   );
 }
 
-function MeetupRow({ meetup, formatTime }) {
+function MeetupRow({ meetup, formatTime, isPast, onConfirm }) {
+  const statusBadge = meetup.completed === true
+    ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Done</span>
+    : meetup.completed === false
+    ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Didn't happen</span>
+    : null;
+
   return (
-    <div className="bg-white rounded-2xl border border-pink-100 shadow-sm p-4">
+    <div className={`bg-white rounded-2xl border shadow-sm p-4 ${isPast && meetup.completed == null ? "border-amber-200" : "border-pink-100"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-bold text-gray-900 text-sm">{meetup.personName}</p>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-pink-50 text-pink-600">
-              Meetup
-            </span>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-pink-50 text-pink-600">Meetup</span>
+            {statusBadge}
           </div>
           <div className="mt-2 space-y-1">
             <div className="flex gap-1.5">
@@ -200,6 +211,25 @@ function MeetupRow({ meetup, formatTime }) {
               </div>
             )}
           </div>
+          {isPast && meetup.completed == null && (
+            <div className="mt-3 space-y-1.5">
+              <p className="text-xs font-semibold text-gray-500">Did this meetup happen?</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => onConfirm(meetup.id, true)}
+                  className="flex-1 py-1.5 text-xs font-semibold rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                >
+                  ✓ Yes
+                </button>
+                <button
+                  onClick={() => onConfirm(meetup.id, false)}
+                  className="flex-1 py-1.5 text-xs font-semibold rounded-xl bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 transition-colors"
+                >
+                  ✗ No
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

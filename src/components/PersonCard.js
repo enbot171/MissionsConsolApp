@@ -9,13 +9,20 @@ const roleStyles = {
   "Core Team": "bg-orange-50 text-orange-600",
 };
 
-export default function PersonCard({ person, onRemove }) {
+export default function PersonCard({ person, onRemove, onSelect, selected }) {
   const router = useRouter();
+
+  const handleClick = () => {
+    if (onSelect) { onSelect(person); return; }
+    router.push(`/person/${person.id}`);
+  };
 
   return (
     <div
-      onClick={() => router.push(`/person/${person.id}`)}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 cursor-pointer active:scale-[0.98] transition-transform"
+      onClick={handleClick}
+      className={`bg-white rounded-2xl border shadow-sm p-4 flex items-center gap-3 cursor-pointer active:scale-[0.98] transition-transform ${
+        selected ? "border-blue-400 bg-blue-50" : "border-gray-100"
+      }`}
     >
       {/* Avatar */}
       <div className="w-11 h-11 rounded-xl bg-linear-to-br from-blue-400 to-indigo-500 flex items-center justify-center shrink-0 shadow-sm">
@@ -42,7 +49,17 @@ export default function PersonCard({ person, onRemove }) {
         )}
       </div>
 
-      {onRemove ? (
+      {onSelect ? (
+        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+          selected ? "bg-blue-500 border-blue-500" : "border-gray-300"
+        }`}>
+          {selected && (
+            <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          )}
+        </div>
+      ) : onRemove ? (
         <button
           onClick={(e) => { e.stopPropagation(); onRemove(person); }}
           className="w-7 h-7 rounded-full bg-red-50 text-red-400 flex items-center justify-center shrink-0 hover:bg-red-100 transition-colors"

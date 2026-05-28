@@ -220,6 +220,60 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {/* Needs confirmation — past meetups with no response */}
+      {meetups.filter((m) => {
+        const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
+        return d < today && m.completed == null;
+      }).length > 0 && (
+        <div className="mt-6">
+          <p className="text-sm font-bold text-gray-800 mb-2">Needs Confirmation</p>
+          <div className="space-y-2">
+            {meetups
+              .filter((m) => { const d = m.date?.toDate ? m.date.toDate() : new Date(m.date); return d < today && m.completed == null; })
+              .map((m) => {
+                const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
+                return (
+                  <div key={m.id} className="bg-white rounded-xl border border-amber-200 shadow-sm px-4 py-3 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-bold text-amber-600">{d.getDate()}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{m.personName}</p>
+                        <p className="text-xs text-gray-400">
+                          {d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {formatMeetupTime(m.date)}
+                          {m.location ? ` · ${m.location}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs font-semibold text-gray-500">Did this meetup happen?</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          await updateMeetup(m.id, { completed: true });
+                          setMeetups((prev) => prev.map((x) => x.id === m.id ? { ...x, completed: true } : x));
+                        }}
+                        className="flex-1 py-1.5 text-xs font-semibold rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                      >
+                        ✓ Yes, it happened
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await updateMeetup(m.id, { completed: false });
+                          setMeetups((prev) => prev.map((x) => x.id === m.id ? { ...x, completed: false } : x));
+                        }}
+                        className="flex-1 py-1.5 text-xs font-semibold rounded-xl bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 transition-colors"
+                      >
+                        ✗ Didn't happen
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
       {/* Upcoming meetups list */}
       {meetups.filter((m) => {
         const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);

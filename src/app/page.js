@@ -126,7 +126,7 @@ export default function Dashboard() {
 
   const myTalkedTo = statsLoading ? null : countTalkedTo(myPeople, myNoContact, period);
   const teamTalkedTo = statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period);
-  const myMeetupCount = statsLoading ? null : countMeetups(allMeetups, period);
+  const myMeetupCount = statsLoading ? null : countMeetups(allMeetups.filter((m) => m.completed === true), period);
 
   const myMetrics = [
     { label: "Talked To",        value: myTalkedTo,           border: "border-violet-600" },
