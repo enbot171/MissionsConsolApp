@@ -284,9 +284,11 @@ export const markAttendance = async (cgId, date, present, absent) => {
 // ── Meetups ───────────────────────────────────────────────────────────────────
 
 export const addMeetup = async (data) => {
+  const meetupDate = new Date(data.date);
   const ref = await addDoc(collection(db, "meetups"), {
     ...data,
-    date: Timestamp.fromDate(new Date(data.date)),
+    date: Timestamp.fromDate(meetupDate),
+    completed: meetupDate < new Date() ? true : null,
     createdAt: serverTimestamp(),
   });
   return ref.id;
