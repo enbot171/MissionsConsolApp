@@ -46,7 +46,6 @@ export default function CalendarPage() {
   const [peopleByDay, setPeopleByDay] = useState({});
   const [meetups, setMeetups] = useState([]);
   const [myPeople, setMyPeople] = useState([]);
-  const [fetching, setFetching] = useState(true);
   const [modal, setModal] = useState(null); // null | { mode: "add"|"edit", meetup?, date? }
   const [form, setForm] = useState({ personId: "", personName: "", date: "", location: "", notes: "" });
   const [saving, setSaving] = useState(false);
@@ -54,7 +53,6 @@ export default function CalendarPage() {
 
   useEffect(() => {
     if (!user) return;
-    setFetching(true);
     Promise.all([
       getPeopleByAssigneeForMonth(user.uid, year, month),
       getMeetupsByAssignee(user.uid),
@@ -68,7 +66,6 @@ export default function CalendarPage() {
       setPeopleByDay(byDay);
       setMeetups(allMeetups);
       setMyPeople(allPeople);
-      setFetching(false);
     });
   }, [user, year, month]);
 
@@ -133,6 +130,18 @@ export default function CalendarPage() {
   const filteredPeople = myPeople.filter((p) =>
     p.name?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const needsConfirmation = meetups.filter((m) => {
+    const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
+    return d < today && m.completed == null;
+  });
+
+  const upcomingMeetups = meetups
+    .filter((m) => {
+      const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
+      return d >= today;
+    })
+    .slice(0, 10);
 
   return (
     <PageShell
@@ -221,16 +230,11 @@ export default function CalendarPage() {
       </div>
 
       {/* Needs confirmation — past meetups with no response */}
-      {meetups.filter((m) => {
-        const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
-        return d < today && m.completed == null;
-      }).length > 0 && (
+      {needsConfirmation.length > 0 && (
         <div className="mt-6">
           <p className="text-sm font-bold text-gray-800 mb-2">Needs Confirmation</p>
           <div className="space-y-2">
-            {meetups
-              .filter((m) => { const d = m.date?.toDate ? m.date.toDate() : new Date(m.date); return d < today && m.completed == null; })
-              .map((m) => {
+            {needsConfirmation.map((m) => {
                 const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
                 return (
                   <div key={m.id} className="bg-white rounded-xl border border-amber-200 shadow-sm px-4 py-3 space-y-2">
@@ -275,17 +279,11 @@ export default function CalendarPage() {
       )}
 
       {/* Upcoming meetups list */}
-      {meetups.filter((m) => {
-        const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
-        return d >= today;
-      }).length > 0 && (
+      {upcomingMeetups.length > 0 && (
         <div className="mt-6">
           <p className="text-sm font-bold text-gray-800 mb-2">Upcoming Meetups</p>
           <div className="space-y-2">
-            {meetups
-              .filter((m) => { const d = m.date?.toDate ? m.date.toDate() : new Date(m.date); return d >= today; })
-              .slice(0, 10)
-              .map((m) => {
+            {upcomingMeetups.map((m) => {
                 const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
                 return (
                   <div

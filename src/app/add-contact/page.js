@@ -8,6 +8,8 @@ import { addPerson, getCGsByTeam, getCoreTeamsByTeam } from "@/lib/firestore";
 import PageShell from "@/components/PageShell";
 import { CONTACT_TYPES, SOURCES, CONTACT_ROLES } from "@/config/app";
 
+const EXCLUSIVE_ROLES = ["Contact", "Disciple"];
+
 const roleColors = {
   Contact: "bg-blue-500", Disciple: "bg-emerald-500", CGL: "bg-violet-500",
 };
@@ -61,9 +63,8 @@ function AddContactInner() {
     if (cur.includes(r)) {
       set("roles", cur.filter((x) => x !== r));
     } else {
-      const exclusive = ["Contact", "Disciple"];
-      const next = exclusive.includes(r)
-        ? [...cur.filter((x) => !exclusive.includes(x)), r]
+      const next = EXCLUSIVE_ROLES.includes(r)
+        ? [...cur.filter((x) => !EXCLUSIVE_ROLES.includes(x)), r]
         : [...cur, r];
       set("roles", next);
     }

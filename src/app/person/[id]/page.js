@@ -100,7 +100,7 @@ export default function PersonView() {
     setSaving(false);
   };
 
-const handleArchive = async () => {
+  const handleArchive = async () => {
     if (!confirm(`Archive ${person.name}?`)) return;
     setSaving(true);
     try {

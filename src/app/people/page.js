@@ -25,6 +25,7 @@ const BOOL_OPTIONS = [
   { value: "no", label: "No" },
 ];
 
+const EXCLUSIVE_ROLES = ["Contact", "Disciple"];
 const EMPTY_FILTERS = { contactType: "", source: "", gospelShared: "", prayed: "", saved: "" };
 
 function FilterSelect({ label, value, onChange, options }) {
@@ -91,8 +92,6 @@ export default function People() {
     setSelectMode(false);
     setArchiving(false);
   };
-
-  const EXCLUSIVE_ROLES = ["Contact", "Disciple"];
 
   const toggleRole = (r) => {
     if (r === "Archived") { setShowArchived((v) => !v); return; }
