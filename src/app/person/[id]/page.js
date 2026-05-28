@@ -200,6 +200,15 @@ export default function PersonView() {
             />
             <Field label="Met At" value={form.metAt || ""} onChange={(v) => set("metAt", v)} />
             <Field label="Remarks" value={form.description || ""} onChange={(v) => set("description", v)} textarea />
+            {form.lastFollowedUpAt && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">Last Followed Up</label>
+                <p className="text-sm text-gray-600">
+                  {(form.lastFollowedUpAt?.toDate ? form.lastFollowedUpAt.toDate() : new Date(form.lastFollowedUpAt))
+                    .toLocaleDateString([], { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
+                </p>
+              </div>
+            )}
           </Card>
 
           <Card title="Roles">

@@ -3,12 +3,41 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getPeopleByAssignee, getTeamPeopleAndNoContact, getNoContactByAssignee, getMeetupsByAssignee } from "@/lib/firestore";
+import { getPeopleByAssignee, getTeamPeopleAndNoContact, getNoContactByAssignee, getMeetupsByAssignee, updatePerson } from "@/lib/firestore";
+import { serverTimestamp } from "firebase/firestore";
 import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import Spinner from "@/components/Spinner";
 import { useSidebar } from "@/context/SidebarContext";
-import { FiClipboard, FiCalendar } from "react-icons/fi";
+import { FiClipboard, FiCalendar, FiBell, FiCheck } from "react-icons/fi";
+
+const DEFAULT_FOLLOW_UP_DAYS = 3;
+
+function getRefDate(p) {
+  if (p.lastFollowedUpAt?.toDate) return p.lastFollowedUpAt.toDate();
+  if (p.createdAt?.toDate) return p.createdAt.toDate();
+  if (p.createdAt) return new Date(p.createdAt);
+  return null;
+}
+
+function daysSince(date) {
+  return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function getOverduePeople(people, followUpDays) {
+  return people
+    .filter((p) => {
+      if (p.noContact) return false;
+      const ref = getRefDate(p);
+      if (!ref) return false;
+      return daysSince(ref) >= followUpDays;
+    })
+    .sort((a, b) => {
+      const dA = daysSince(getRefDate(a));
+      const dB = daysSince(getRefDate(b));
+      return dB - dA;
+    });
+}
 
 const PERIODS = ["Daily", "Weekly", "All Time"];
 
@@ -88,6 +117,7 @@ export default function Dashboard() {
   const [period, setPeriod] = useState("Weekly");
   const [allMeetups, setAllMeetups] = useState([]);
   const [upcomingMeetups, setUpcomingMeetups] = useState([]);
+  const [texting, setTexting] = useState(new Set());
 
   useEffect(() => {
     if (!user) return;
@@ -127,6 +157,18 @@ export default function Dashboard() {
   const myTalkedTo = statsLoading ? null : countTalkedTo(myPeople, myNoContact, period);
   const teamTalkedTo = statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period);
   const myMeetupCount = statsLoading ? null : countMeetups(allMeetups.filter((m) => m.completed === true), period);
+  const followUpDays = profile?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
+  const overduePeople = statsLoading ? [] : getOverduePeople(myPeople, followUpDays);
+  const overdueCount = overduePeople.length;
+
+  const handleTexted = async (person) => {
+    setTexting((prev) => new Set([...prev, person.id]));
+    await updatePerson(person.id, { lastFollowedUpAt: serverTimestamp() });
+    setMyPeople((prev) => prev.map((p) =>
+      p.id === person.id ? { ...p, lastFollowedUpAt: { toDate: () => new Date() } } : p
+    ));
+    setTexting((prev) => { const n = new Set(prev); n.delete(person.id); return n; });
+  };
 
   const myMetrics = [
     { label: "Talked To",        value: myTalkedTo,           border: "border-violet-600" },
@@ -189,7 +231,66 @@ export default function Dashboard() {
                 </div>
                 <span className="text-sm font-semibold text-gray-800">Calendar</span>
               </button>
+              <button
+                onClick={() => router.push("/follow-ups")}
+                className="relative flex-1 flex items-center gap-2 px-3 py-3 bg-white rounded-2xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors"
+              >
+                <div className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
+                  <FiBell className="text-rose-500" size={13} />
+                </div>
+                <span className="text-sm font-semibold text-gray-800">Follow-ups</span>
+                {overdueCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {overdueCount}
+                  </span>
+                )}
+              </button>
             </div>
+
+            {/* Follow-ups to-do */}
+            {overduePeople.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-bold text-gray-800">
+                    Follow-ups <span className="text-rose-500 font-semibold">({overdueCount})</span>
+                  </p>
+                  {overdueCount > 5 && (
+                    <button onClick={() => router.push("/follow-ups")} className="text-xs font-semibold text-rose-500">
+                      See all →
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {overduePeople.slice(0, 5).map((p) => {
+                    const ref = getRefDate(p);
+                    const days = ref ? daysSince(ref) - followUpDays : 0;
+                    return (
+                      <div key={p.id} className="bg-white rounded-xl border border-rose-100 shadow-sm px-4 py-3 flex items-center gap-3">
+                        <div
+                          onClick={() => router.push(`/person/${p.id}`)}
+                          className="w-8 h-8 rounded-xl bg-linear-to-br from-blue-400 to-indigo-500 flex items-center justify-center shrink-0 cursor-pointer"
+                        >
+                          <span className="text-xs font-bold text-white">{p.name?.charAt(0).toUpperCase() || "?"}</span>
+                        </div>
+                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/person/${p.id}`)}>
+                          <p className="text-sm font-semibold text-gray-900 truncate">{p.name}</p>
+                          <p className="text-xs text-rose-500 font-semibold">
+                            {days === 0 ? "Due today" : `${days}d overdue`}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleTexted(p)}
+                          disabled={texting.has(p.id)}
+                          className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+                        >
+                          <FiCheck size={12} /> Texted
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Upcoming meetups */}
             {upcomingMeetups.length > 0 && (

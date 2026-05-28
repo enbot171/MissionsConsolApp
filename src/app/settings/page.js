@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getTeam } from "@/lib/firestore";
+import { getTeam, updateUserProfile } from "@/lib/firestore";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import BottomNav from "@/components/BottomNav";
@@ -11,18 +11,35 @@ import SideNav from "@/components/SideNav";
 import { useSidebar } from "@/context/SidebarContext";
 import { FiLogOut, FiShield } from "react-icons/fi";
 
+const DEFAULT_FOLLOW_UP_DAYS = 3;
+
 export default function Settings() {
-  const { profile, loading } = useRequireAuth();
+  const { user, profile, loading } = useRequireAuth();
   const router = useRouter();
   const { collapsed } = useSidebar();
   const ml = collapsed ? "md:ml-16" : "md:ml-60";
   const [teamName, setTeamName] = useState(null);
+  const [followUpDays, setFollowUpDays] = useState(null);
+  const [savingDays, setSavingDays] = useState(false);
+  const [savedDays, setSavedDays] = useState(false);
 
   useEffect(() => {
     if (profile?.teamId) {
       getTeam(profile.teamId).then((t) => setTeamName(t?.name || null));
     }
-  }, [profile?.teamId]);
+    if (profile) {
+      setFollowUpDays(profile.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS);
+    }
+  }, [profile?.teamId, profile]);
+
+  const handleSaveFollowUpDays = async () => {
+    const days = Math.min(90, Math.max(1, parseInt(followUpDays) || DEFAULT_FOLLOW_UP_DAYS));
+    setSavingDays(true);
+    await updateUserProfile(user.uid, { followUpDays: days });
+    setSavingDays(false);
+    setSavedDays(true);
+    setTimeout(() => setSavedDays(false), 2000);
+  };
 
   if (loading) return null;
 
@@ -59,6 +76,33 @@ export default function Settings() {
                   </span>
                 </div>
                 <Row label="Team" value={teamName || (profile?.teamId ? "Loading…" : "Unassigned")} />
+              </div>
+            </div>
+
+            {/* Follow-up Reminders */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Follow-up Reminders</p>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-500">Remind me after (days)</label>
+                <p className="text-xs text-gray-400">Contacts you haven't followed up with in this many days will appear on your to-do list.</p>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={followUpDays ?? DEFAULT_FOLLOW_UP_DAYS}
+                    onChange={(e) => setFollowUpDays(e.target.value)}
+                    className="w-20 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-400 bg-gray-50 text-center"
+                  />
+                  <span className="text-sm text-gray-500">days</span>
+                  <button
+                    onClick={handleSaveFollowUpDays}
+                    disabled={savingDays}
+                    className="ml-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-colors"
+                  >
+                    {savingDays ? "Saving…" : savedDays ? "Saved!" : "Save"}
+                  </button>
+                </div>
               </div>
             </div>
 

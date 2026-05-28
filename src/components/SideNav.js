@@ -3,7 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { FaHome, FaPlus, FaUsers, FaLayerGroup } from "react-icons/fa";
 import { HiMenu } from "react-icons/hi";
-import { FiChevronLeft, FiChevronRight, FiClipboard, FiCalendar } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiClipboard, FiCalendar, FiBell } from "react-icons/fi";
 import { useSidebar } from "@/context/SidebarContext";
 
 const tabs = [
@@ -11,8 +11,9 @@ const tabs = [
   { path: "/people",  icon: FaUsers,      label: "People" },
   { path: "/groups",  icon: FaLayerGroup, label: "Groups" },
   { path: "/summary",  icon: FiClipboard,  label: "Summary"  },
-  { path: "/calendar", icon: FiCalendar,  label: "Calendar" },
-  { path: "/settings", icon: HiMenu,      label: "Settings" },
+  { path: "/calendar",   icon: FiCalendar,  label: "Calendar"   },
+  { path: "/follow-ups", icon: FiBell,     label: "Follow-ups" },
+  { path: "/settings",   icon: HiMenu,     label: "Settings"   },
 ];
 
 export default function SideNav() {
