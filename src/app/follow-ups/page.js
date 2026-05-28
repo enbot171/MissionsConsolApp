@@ -9,6 +9,7 @@ import PageShell from "@/components/PageShell";
 import { FiArchive, FiCheck } from "react-icons/fi";
 
 const DEFAULT_FOLLOW_UP_DAYS = 3;
+const DEFAULT_INACTIVITY_DAYS = 30;
 
 function daysSince(date) {
   return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
@@ -21,11 +22,62 @@ function getRefDate(person) {
   return null;
 }
 
-function computeDaysUntilDue(person, globalFollowUpDays) {
-  const ref = getRefDate(person);
-  if (!ref) return null;
-  const interval = person.followUpDays ?? globalFollowUpDays;
-  return interval - daysSince(ref);
+function getScheduledDate(person) {
+  if (!person.scheduledFollowUpAt) return null;
+  if (person.scheduledFollowUpAt.toDate) return person.scheduledFollowUpAt.toDate();
+  return new Date(person.scheduledFollowUpAt);
+}
+
+// Classify each person into exactly one type (priority: 3 > 2 > 1)
+function classifyPeople(people, followUpDays, inactivityDays) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const type3 = [], type2 = [], type1 = [], upcoming = [];
+
+  people.forEach((p) => {
+    const ref = getRefDate(p);
+    const scheduled = getScheduledDate(p);
+    const since = ref ? daysSince(ref) : null;
+    const interval = p.followUpDays ?? followUpDays;
+
+    // Type 3: manual scheduled date reached
+    if (scheduled && scheduled <= today) {
+      type3.push({ ...p, _scheduled: scheduled });
+      return;
+    }
+
+    // Type 2: inactive for inactivityDays+
+    if (since !== null && since >= inactivityDays) {
+      type2.push({ ...p, _since: since });
+      return;
+    }
+
+    // Type 1: regular cadence overdue
+    if (since !== null && since >= interval) {
+      type1.push({ ...p, _daysOverdue: since - interval });
+      return;
+    }
+
+    // Coming up: due within next 7 days (Type 1) or scheduled within 7 days (Type 3)
+    const dueIn = since !== null ? interval - since : null;
+    const scheduledIn = scheduled ? Math.ceil((scheduled - today) / (1000 * 60 * 60 * 24)) : null;
+
+    if ((dueIn !== null && dueIn <= 7) || (scheduledIn !== null && scheduledIn <= 7)) {
+      upcoming.push({ ...p, _dueIn: dueIn, _scheduledIn: scheduledIn });
+    }
+  });
+
+  type3.sort((a, b) => a._scheduled - b._scheduled);
+  type2.sort((a, b) => b._since - a._since);
+  type1.sort((a, b) => b._daysOverdue - a._daysOverdue);
+  upcoming.sort((a, b) => {
+    const aMin = Math.min(a._dueIn ?? 99, a._scheduledIn ?? 99);
+    const bMin = Math.min(b._dueIn ?? 99, b._scheduledIn ?? 99);
+    return aMin - bMin;
+  });
+
+  return { type1, type2, type3, upcoming };
 }
 
 const roleStyles = {
@@ -40,8 +92,7 @@ export default function FollowUps() {
   const router = useRouter();
   const [people, setPeople] = useState([]);
   const [fetching, setFetching] = useState(true);
-  const [checking, setChecking] = useState(new Set());
-  const [archiving, setArchiving] = useState(new Set());
+  const [acting, setActing] = useState({}); // { [id]: "checking" | "archiving" }
 
   useEffect(() => {
     if (!user) return;
@@ -53,34 +104,34 @@ export default function FollowUps() {
 
   if (loading) return null;
 
-  const globalFollowUpDays = profile?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
+  const followUpDays = profile?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
+  const inactivityDays = profile?.inactivityCheckDays ?? DEFAULT_INACTIVITY_DAYS;
 
-  const withDue = people
-    .map((p) => ({ ...p, _due: computeDaysUntilDue(p, globalFollowUpDays) }))
-    .filter((p) => p._due !== null);
+  const { type1, type2, type3, upcoming } = classifyPeople(people, followUpDays, inactivityDays);
+  const totalDue = type1.length + type2.length + type3.length;
 
-  const overdue = withDue
-    .filter((p) => p._due <= 0)
-    .sort((a, b) => a._due - b._due);
-
-  const upcoming = withDue
-    .filter((p) => p._due > 0 && p._due <= 7)
-    .sort((a, b) => a._due - b._due);
+  const setAct = (id, val) => setActing((prev) => ({ ...prev, [id]: val }));
+  const clearAct = (id) => setActing((prev) => { const n = { ...prev }; delete n[id]; return n; });
 
   const handleCheck = async (person) => {
-    setChecking((prev) => new Set([...prev, person.id]));
-    await updatePerson(person.id, { lastFollowedUpAt: serverTimestamp() });
+    setAct(person.id, "checking");
+    await updatePerson(person.id, {
+      lastFollowedUpAt: serverTimestamp(),
+      ...(person.scheduledFollowUpAt ? { scheduledFollowUpAt: null } : {}),
+    });
     setPeople((prev) => prev.map((p) =>
-      p.id === person.id ? { ...p, lastFollowedUpAt: { toDate: () => new Date() } } : p
+      p.id === person.id
+        ? { ...p, lastFollowedUpAt: { toDate: () => new Date() }, scheduledFollowUpAt: null }
+        : p
     ));
-    setChecking((prev) => { const n = new Set(prev); n.delete(person.id); return n; });
+    clearAct(person.id);
   };
 
   const handleArchive = async (person) => {
-    setArchiving((prev) => new Set([...prev, person.id]));
+    setAct(person.id, "archiving");
     await updatePerson(person.id, { archived: true });
     setPeople((prev) => prev.filter((p) => p.id !== person.id));
-    setArchiving((prev) => { const n = new Set(prev); n.delete(person.id); return n; });
+    clearAct(person.id);
   };
 
   return (
@@ -89,7 +140,7 @@ export default function FollowUps() {
         <div className="flex justify-center py-12">
           <div className="w-6 h-6 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
         </div>
-      ) : overdue.length === 0 && upcoming.length === 0 ? (
+      ) : totalDue === 0 && upcoming.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
           <p className="text-2xl mb-2">🎉</p>
           <p className="font-semibold text-gray-800">Everyone's up to date!</p>
@@ -97,63 +148,117 @@ export default function FollowUps() {
         </div>
       ) : (
         <div className="space-y-6">
-          {overdue.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-sm font-bold text-gray-800">
-                Overdue <span className="text-gray-400 font-semibold">({overdue.length})</span>
-              </p>
-              {overdue.map((p) => (
+
+          {/* Type 3 — Scheduled */}
+          {type3.length > 0 && (
+            <Section label="Scheduled" count={type3.length} accent="text-blue-600">
+              {type3.map((p) => (
                 <PersonRow
                   key={p.id}
                   person={p}
+                  badge={`Scheduled · ${p._scheduled.toLocaleDateString([], { month: "short", day: "numeric" })}`}
+                  badgeColor="text-blue-500"
                   onNavigate={() => router.push(`/person/${p.id}`)}
                   onCheck={handleCheck}
                   onArchive={handleArchive}
-                  isChecking={checking.has(p.id)}
-                  isArchiving={archiving.has(p.id)}
+                  acting={acting[p.id]}
                 />
               ))}
-            </div>
+            </Section>
           )}
 
-          {upcoming.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-sm font-bold text-gray-800">
-                Coming up <span className="text-gray-400 font-semibold">({upcoming.length})</span>
+          {/* Type 2 — Inactivity check */}
+          {type2.length > 0 && (
+            <Section label="Check if still active" count={type2.length} accent="text-orange-500">
+              <p className="text-xs text-gray-400 -mt-1">
+                These people haven't been followed up with in {inactivityDays}+ days. Still active or archive?
               </p>
-              {upcoming.map((p) => (
+              {type2.map((p) => (
                 <PersonRow
                   key={p.id}
                   person={p}
+                  badge={`${p._since}d without contact`}
+                  badgeColor="text-orange-500"
                   onNavigate={() => router.push(`/person/${p.id}`)}
                   onCheck={handleCheck}
                   onArchive={handleArchive}
-                  isChecking={checking.has(p.id)}
-                  isArchiving={archiving.has(p.id)}
+                  acting={acting[p.id]}
+                  checkLabel="Still active"
                 />
               ))}
-            </div>
+            </Section>
           )}
+
+          {/* Type 1 — Regular follow-up */}
+          {type1.length > 0 && (
+            <Section label="Follow up" count={type1.length} accent="text-rose-500">
+              {type1.map((p) => (
+                <PersonRow
+                  key={p.id}
+                  person={p}
+                  badge={p._daysOverdue === 0 ? "Due today" : `${p._daysOverdue}d overdue`}
+                  badgeColor="text-rose-500"
+                  onNavigate={() => router.push(`/person/${p.id}`)}
+                  onCheck={handleCheck}
+                  onArchive={handleArchive}
+                  acting={acting[p.id]}
+                />
+              ))}
+            </Section>
+          )}
+
+          {/* Coming up */}
+          {upcoming.length > 0 && (
+            <Section label="Coming up" count={upcoming.length} accent="text-gray-400">
+              {upcoming.map((p) => {
+                const dueIn = p._dueIn !== null ? p._dueIn : p._scheduledIn;
+                return (
+                  <PersonRow
+                    key={p.id}
+                    person={p}
+                    badge={dueIn === 0 ? "Due today" : `In ${dueIn}d`}
+                    badgeColor="text-amber-500"
+                    onNavigate={() => router.push(`/person/${p.id}`)}
+                    onCheck={handleCheck}
+                    onArchive={handleArchive}
+                    acting={acting[p.id]}
+                  />
+                );
+              })}
+            </Section>
+          )}
+
         </div>
       )}
     </PageShell>
   );
 }
 
-function PersonRow({ person, onNavigate, onCheck, onArchive, isChecking, isArchiving }) {
-  const due = person._due;
-  const isOverdue = due <= 0;
+function Section({ label, count, accent, children }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-bold text-gray-800">
+        {label} <span className={`font-semibold text-sm ${accent}`}>({count})</span>
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, acting, checkLabel }) {
+  const isChecking = acting === "checking";
+  const isArchiving = acting === "archiving";
+  const busy = !!acting;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
       {/* Checkbox */}
       <button
         onClick={() => onCheck(person)}
-        disabled={isChecking || isArchiving}
+        disabled={busy}
+        title={checkLabel || "Mark as followed up"}
         className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 ${
-          isChecking
-            ? "bg-emerald-500 border-emerald-500"
-            : "border-gray-300 hover:border-emerald-400"
+          isChecking ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"
         }`}
       >
         {isChecking && <FiCheck size={11} className="text-white" />}
@@ -172,23 +277,19 @@ function PersonRow({ person, onNavigate, onCheck, onArchive, isChecking, isArchi
               {r}
             </span>
           ))}
-          <span className={`text-[10px] font-semibold ${isOverdue ? "text-rose-500" : "text-amber-500"}`}>
-            {isOverdue
-              ? Math.abs(due) === 0 ? "Due today" : `${Math.abs(due)}d overdue`
-              : `Due in ${due}d`}
-          </span>
+          <span className={`text-[10px] font-semibold ${badgeColor}`}>{badge}</span>
           {person.followUpDays && (
             <span className="text-[10px] text-gray-400">· every {person.followUpDays}d</span>
           )}
         </div>
       </div>
 
-      {/* Archive button */}
+      {/* Archive */}
       <button
         onClick={() => onArchive(person)}
-        disabled={isArchiving || isChecking}
-        className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 transition-colors"
+        disabled={busy}
         title="Archive"
+        className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 transition-colors"
       >
         {isArchiving
           ? <span className="w-3 h-3 rounded-full border border-gray-400 border-t-transparent animate-spin" />

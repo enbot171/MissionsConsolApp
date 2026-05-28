@@ -12,6 +12,7 @@ import { useSidebar } from "@/context/SidebarContext";
 import { FiClipboard, FiCalendar, FiBell, FiCheck } from "react-icons/fi";
 
 const DEFAULT_FOLLOW_UP_DAYS = 3;
+const DEFAULT_INACTIVITY_DAYS = 30;
 
 function getRefDate(p) {
   if (p.lastFollowedUpAt?.toDate) return p.lastFollowedUpAt.toDate();
@@ -24,19 +25,31 @@ function daysSince(date) {
   return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function getOverduePeople(people, globalFollowUpDays) {
+function getScheduledDate(p) {
+  if (!p.scheduledFollowUpAt) return null;
+  return p.scheduledFollowUpAt.toDate ? p.scheduledFollowUpAt.toDate() : new Date(p.scheduledFollowUpAt);
+}
+
+function getOverduePeople(people, followUpDays, inactivityDays) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   return people
     .filter((p) => {
       if (p.noContact) return false;
+      const scheduled = getScheduledDate(p);
+      if (scheduled && scheduled <= today) return true;
       const ref = getRefDate(p);
       if (!ref) return false;
-      const interval = p.followUpDays ?? globalFollowUpDays;
-      return daysSince(ref) >= interval;
+      const since = daysSince(ref);
+      const interval = p.followUpDays ?? followUpDays;
+      return since >= interval; // includes Type 1 and Type 2
     })
     .sort((a, b) => {
-      const intervalA = a.followUpDays ?? globalFollowUpDays;
-      const intervalB = b.followUpDays ?? globalFollowUpDays;
-      return (daysSince(getRefDate(b)) - intervalB) - (daysSince(getRefDate(a)) - intervalA);
+      // most overdue first (by days since ref relative to their interval)
+      const refA = getRefDate(a), refB = getRefDate(b);
+      const sinceA = refA ? daysSince(refA) : 0;
+      const sinceB = refB ? daysSince(refB) : 0;
+      return sinceB - sinceA;
     });
 }
 
@@ -159,7 +172,8 @@ export default function Dashboard() {
   const teamTalkedTo = statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period);
   const myMeetupCount = statsLoading ? null : countMeetups(allMeetups.filter((m) => m.completed === true), period);
   const followUpDays = profile?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
-  const overduePeople = statsLoading ? [] : getOverduePeople(myPeople, followUpDays);
+  const inactivityDays = profile?.inactivityCheckDays ?? DEFAULT_INACTIVITY_DAYS;
+  const overduePeople = statsLoading ? [] : getOverduePeople(myPeople, followUpDays, inactivityDays);
   const overdueCount = overduePeople.length;
 
   const handleTexted = async (person) => {
@@ -264,6 +278,9 @@ export default function Dashboard() {
                 <div className="space-y-2">
                   {overduePeople.slice(0, 5).map((p) => {
                     const ref = getRefDate(p);
+                    const scheduled = getScheduledDate(p);
+                    const today = new Date(); today.setHours(0,0,0,0);
+                    const isScheduledDue = scheduled && scheduled <= today;
                     const interval = p.followUpDays ?? followUpDays;
                     const days = ref ? daysSince(ref) - interval : 0;
                     const isTexting = texting.has(p.id);
@@ -282,7 +299,9 @@ export default function Dashboard() {
                         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/person/${p.id}`)}>
                           <p className="text-sm font-semibold text-gray-900 truncate">{p.name}</p>
                           <p className="text-xs text-rose-500 font-semibold">
-                            {days === 0 ? "Due today" : `${days}d overdue`}
+                            {isScheduledDue
+                              ? `Scheduled · ${scheduled.toLocaleDateString([], { month: "short", day: "numeric" })}`
+                              : days === 0 ? "Due today" : `${days}d overdue`}
                           </p>
                         </div>
                       </div>

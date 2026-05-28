@@ -12,6 +12,7 @@ import { useSidebar } from "@/context/SidebarContext";
 import { FiLogOut, FiShield } from "react-icons/fi";
 
 const DEFAULT_FOLLOW_UP_DAYS = 3;
+const DEFAULT_INACTIVITY_DAYS = 30;
 
 export default function Settings() {
   const { user, profile, loading } = useRequireAuth();
@@ -20,8 +21,9 @@ export default function Settings() {
   const ml = collapsed ? "md:ml-16" : "md:ml-60";
   const [teamName, setTeamName] = useState(null);
   const [followUpDays, setFollowUpDays] = useState(null);
-  const [savingDays, setSavingDays] = useState(false);
-  const [savedDays, setSavedDays] = useState(false);
+  const [inactivityDays, setInactivityDays] = useState(null);
+  const [savingReminders, setSavingReminders] = useState(false);
+  const [savedReminders, setSavedReminders] = useState(false);
 
   useEffect(() => {
     if (profile?.teamId) {
@@ -29,16 +31,18 @@ export default function Settings() {
     }
     if (profile) {
       setFollowUpDays(profile.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS);
+      setInactivityDays(profile.inactivityCheckDays ?? DEFAULT_INACTIVITY_DAYS);
     }
   }, [profile?.teamId, profile]);
 
-  const handleSaveFollowUpDays = async () => {
+  const handleSaveReminders = async () => {
     const days = Math.min(90, Math.max(1, parseInt(followUpDays) || DEFAULT_FOLLOW_UP_DAYS));
-    setSavingDays(true);
-    await updateUserProfile(user.uid, { followUpDays: days });
-    setSavingDays(false);
-    setSavedDays(true);
-    setTimeout(() => setSavedDays(false), 2000);
+    const inDays = Math.min(365, Math.max(7, parseInt(inactivityDays) || DEFAULT_INACTIVITY_DAYS));
+    setSavingReminders(true);
+    await updateUserProfile(user.uid, { followUpDays: days, inactivityCheckDays: inDays });
+    setSavingReminders(false);
+    setSavedReminders(true);
+    setTimeout(() => setSavedReminders(false), 2000);
   };
 
   if (loading) return null;
@@ -80,30 +84,46 @@ export default function Settings() {
             </div>
 
             {/* Follow-up Reminders */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
               <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Follow-up Reminders</p>
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-500">Remind me after (days)</label>
-                <p className="text-xs text-gray-400">Contacts you haven't followed up with in this many days will appear on your to-do list.</p>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-gray-700">First follow-up after</p>
+                <p className="text-xs text-gray-400">Remind you to text a new contact this many days after first meeting them.</p>
                 <div className="flex gap-2 items-center">
                   <input
-                    type="number"
-                    min={1}
-                    max={90}
+                    type="number" min={1} max={90}
                     value={followUpDays ?? DEFAULT_FOLLOW_UP_DAYS}
                     onChange={(e) => setFollowUpDays(e.target.value)}
                     className="w-20 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-400 bg-gray-50 text-center"
                   />
                   <span className="text-sm text-gray-500">days</span>
-                  <button
-                    onClick={handleSaveFollowUpDays}
-                    disabled={savingDays}
-                    className="ml-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-colors"
-                  >
-                    {savingDays ? "Saving…" : savedDays ? "Saved!" : "Save"}
-                  </button>
                 </div>
               </div>
+
+              <div className="border-t border-gray-100" />
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-gray-700">Inactivity check after</p>
+                <p className="text-xs text-gray-400">Flag contacts you haven't followed up with in this long — to check if they're still active or should be archived.</p>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number" min={7} max={365}
+                    value={inactivityDays ?? DEFAULT_INACTIVITY_DAYS}
+                    onChange={(e) => setInactivityDays(e.target.value)}
+                    className="w-20 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-400 bg-gray-50 text-center"
+                  />
+                  <span className="text-sm text-gray-500">days</span>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSaveReminders}
+                disabled={savingReminders}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
+              >
+                {savingReminders ? "Saving…" : savedReminders ? "Saved!" : "Save"}
+              </button>
             </div>
 
             {profile?.role === "Admin" && (

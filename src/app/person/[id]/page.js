@@ -80,6 +80,9 @@ export default function PersonView() {
         progressRemarks: form.progressRemarks || "",
         // follow-up
         ...(form.followUpDays != null ? { followUpDays: parseInt(form.followUpDays) || null } : {}),
+        scheduledFollowUpAt: form.scheduledFollowUpAt instanceof Date
+          ? Timestamp.fromDate(form.scheduledFollowUpAt)
+          : (form.scheduledFollowUpAt ?? null),
         // network
         cgId: form.cgId,
         assignedTo: form.assignedTo,
@@ -209,6 +212,33 @@ export default function PersonView() {
               onChange={(v) => set("followUpDays", v === "" ? null : parseInt(v) || null)}
               placeholder="Use global default"
             />
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-700">Scheduled follow-up</label>
+              <p className="text-[11px] text-gray-400">Optional — set a specific date to be reminded to follow up.</p>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="date"
+                  value={
+                    form.scheduledFollowUpAt instanceof Date
+                      ? form.scheduledFollowUpAt.toISOString().split("T")[0]
+                      : form.scheduledFollowUpAt?.toDate
+                      ? form.scheduledFollowUpAt.toDate().toISOString().split("T")[0]
+                      : ""
+                  }
+                  onChange={(e) => set("scheduledFollowUpAt", e.target.value ? new Date(e.target.value) : null)}
+                  className="flex-1 min-w-0 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                />
+                {form.scheduledFollowUpAt && (
+                  <button
+                    type="button"
+                    onClick={() => set("scheduledFollowUpAt", null)}
+                    className="text-xs text-gray-400 hover:text-gray-600 font-semibold shrink-0"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
             {form.lastFollowedUpAt && (
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-700">Last Followed Up</label>
