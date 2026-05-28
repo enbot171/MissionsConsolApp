@@ -106,6 +106,12 @@ function PersonRow({ person }) {
             </span>
           </div>
           <div className="mt-2 space-y-1">
+            {!isNoContact && (
+              <div className="flex gap-1.5">
+                <span className="text-xs font-semibold text-gray-400 shrink-0">{person.contactType || "Contact"}</span>
+                <span className="text-xs text-gray-600">{person.contact || "—"}</span>
+              </div>
+            )}
             <div className="flex gap-1.5">
               <span className="text-xs font-semibold text-gray-400 shrink-0">Met At</span>
               <span className="text-xs text-gray-600">{person.metAt || "—"}</span>

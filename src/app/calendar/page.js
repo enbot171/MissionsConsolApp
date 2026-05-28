@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import {
@@ -47,12 +47,10 @@ export default function CalendarPage() {
   const [meetups, setMeetups] = useState([]);
   const [myPeople, setMyPeople] = useState([]);
   const [fetching, setFetching] = useState(true);
-  const [hoveredDay, setHoveredDay] = useState(null);
   const [modal, setModal] = useState(null); // null | { mode: "add"|"edit", meetup?, date? }
   const [form, setForm] = useState({ personId: "", personName: "", date: "", location: "", notes: "" });
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
-  const hoverRef = useRef(null);
 
   useEffect(() => {
     if (!user) return;
@@ -183,7 +181,7 @@ export default function CalendarPage() {
           return (
             <div
               key={i}
-              className={`relative bg-white min-h-[64px] p-1.5 cursor-pointer transition-colors hover:bg-blue-50 group ${isToday ? "bg-blue-50" : ""}`}
+              className={`bg-white min-h-[64px] p-1.5 cursor-pointer transition-colors hover:bg-blue-50 ${isToday ? "bg-blue-50" : ""}`}
               onClick={() => {
                 if (contacts.length > 0 || isPast) {
                   router.push(`/summary?date=${dateStr}`);
@@ -191,8 +189,6 @@ export default function CalendarPage() {
                   openAdd(dateStr);
                 }
               }}
-              onMouseEnter={() => (contacts.length > 0 || dayMeetups.length > 0) && setHoveredDay(dateStr)}
-              onMouseLeave={() => setHoveredDay(null)}
             >
               <p className={`text-xs font-bold mb-1 ${isToday ? "text-blue-600" : "text-gray-700"}`}>{day}</p>
               {contacts.length > 0 && (
@@ -205,41 +201,6 @@ export default function CalendarPage() {
                 <div className="flex items-center gap-0.5 mt-0.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
                   <span className="text-[10px] font-semibold text-blue-600">{dayMeetups.length}</span>
-                </div>
-              )}
-
-              {/* Hover popover */}
-              {hoveredDay === dateStr && (
-                <div
-                  className="absolute z-30 top-full left-0 mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 p-2.5 space-y-1.5"
-                  style={{ minWidth: "180px" }}
-                  onMouseEnter={() => setHoveredDay(dateStr)}
-                  onMouseLeave={() => setHoveredDay(null)}
-                >
-                  {contacts.length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-bold text-violet-600 uppercase mb-1">Contacts</p>
-                      {contacts.map((p) => (
-                        <p key={p.id} className="text-xs text-gray-700 truncate">{p.name}</p>
-                      ))}
-                    </div>
-                  )}
-                  {dayMeetups.length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-bold text-blue-600 uppercase mb-1">Meetups</p>
-                      {dayMeetups.map((m) => (
-                        <div key={m.id} className="flex items-center justify-between gap-1">
-                          <p className="text-xs text-gray-700 truncate flex-1">{m.personName} · {formatMeetupTime(m.date)}</p>
-                          <button
-                            onClick={(e) => openEdit(m, e)}
-                            className="text-gray-400 hover:text-blue-600 shrink-0"
-                          >
-                            <FiPlus size={11} className="rotate-45" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
