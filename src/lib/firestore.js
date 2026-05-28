@@ -281,6 +281,54 @@ export const markAttendance = async (cgId, date, present, absent) => {
   return ref.id;
 };
 
+// ── Meetups ───────────────────────────────────────────────────────────────────
+
+export const addMeetup = async (data) => {
+  const ref = await addDoc(collection(db, "meetups"), {
+    ...data,
+    date: Timestamp.fromDate(new Date(data.date)),
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+};
+
+export const getMeetupsByAssignee = async (uid) => {
+  const q = query(
+    collection(db, "meetups"),
+    where("assignedTo", "==", uid),
+    orderBy("date", "asc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
+export const updateMeetup = async (id, data) => {
+  await updateDoc(doc(db, "meetups", id), {
+    ...data,
+    ...(data.date ? { date: Timestamp.fromDate(new Date(data.date)) } : {}),
+  });
+};
+
+export const deleteMeetup = async (id) => {
+  await deleteDoc(doc(db, "meetups", id));
+};
+
+export const getPeopleByAssigneeForMonth = async (uid, year, month) => {
+  const start = new Date(year, month, 1);
+  const end = new Date(year, month + 1, 1);
+  const q = query(
+    collection(db, "people"),
+    where("assignedTo", "==", uid),
+    where("createdAt", ">=", Timestamp.fromDate(start)),
+    where("createdAt", "<", Timestamp.fromDate(end)),
+    orderBy("createdAt", "asc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
+// ── Attendance ────────────────────────────────────────────────────────────────
+
 export const getAttendanceByCG = async (cgId) => {
   const q = query(
     collection(db, "attendance"),

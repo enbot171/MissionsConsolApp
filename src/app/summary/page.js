@@ -1,15 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
+import { useSearchParams } from "next/navigation";
 import { getPeopleByAssigneeAndDate } from "@/lib/firestore";
 import PageShell from "@/components/PageShell";
 
 export default function Summary() {
+  return (
+    <Suspense>
+      <SummaryInner />
+    </Suspense>
+  );
+}
+
+function SummaryInner() {
   const { user, loading } = useRequireAuth();
+  const searchParams = useSearchParams();
   const [all, setAll] = useState([]);
   const [fetching, setFetching] = useState(true);
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(
+    searchParams.get("date") || new Date().toISOString().split("T")[0]
+  );
 
   useEffect(() => {
     if (!user) return;

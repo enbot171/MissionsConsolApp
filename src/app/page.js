@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getPeopleByAssignee, getTeamPeopleAndNoContact, getNoContactByAssignee } from "@/lib/firestore";
+import { getPeopleByAssignee, getTeamPeopleAndNoContact, getNoContactByAssignee, getMeetupsByAssignee } from "@/lib/firestore";
 import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import Spinner from "@/components/Spinner";
 import { useSidebar } from "@/context/SidebarContext";
-import { FiClipboard } from "react-icons/fi";
+import { FiClipboard, FiCalendar } from "react-icons/fi";
 
 const PERIODS = ["Daily", "Weekly", "All Time"];
 
@@ -77,22 +77,29 @@ export default function Dashboard() {
   const [teamNoContact, setTeamNoContact] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [period, setPeriod] = useState("Weekly");
+  const [upcomingMeetups, setUpcomingMeetups] = useState([]);
 
   useEffect(() => {
     if (!user) return;
     setStatsLoading(true);
     const fetchAll = async () => {
-      const [mine, myNC, teamResult] = await Promise.all([
+      const [mine, myNC, teamResult, allMeetups] = await Promise.all([
         getPeopleByAssignee(user.uid),
         getNoContactByAssignee(user.uid),
         profile?.teamId
           ? getTeamPeopleAndNoContact(profile.teamId)
           : Promise.resolve({ people: [], noContact: [] }),
+        getMeetupsByAssignee(user.uid),
       ]);
       setMyPeople(mine);
       setMyNoContact(myNC);
       setTeamPeople(teamResult.people);
       setTeamNoContact(teamResult.noContact);
+      const now = new Date();
+      setUpcomingMeetups(allMeetups.filter((m) => {
+        const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
+        return d >= now;
+      }).slice(0, 3));
     };
     fetchAll().finally(() => setStatsLoading(false));
   }, [user, profile?.teamId]);
@@ -149,17 +156,60 @@ export default function Dashboard() {
         <main className="flex-1 pb-24 md:pb-10 -mt-4">
           <div className="px-4 max-w-lg mx-auto md:max-w-3xl space-y-4">
 
-            {/* Daily Summary shortcut */}
-            <button
-              onClick={() => router.push("/summary")}
-              className="w-full flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors"
-            >
-              <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
-                <FiClipboard className="text-indigo-600" size={15} />
+            {/* Shortcuts row */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => router.push("/summary")}
+                className="flex-1 flex items-center gap-2 px-3 py-3 bg-white rounded-2xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors"
+              >
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                  <FiClipboard className="text-indigo-600" size={13} />
+                </div>
+                <span className="text-sm font-semibold text-gray-800">Daily Summary</span>
+              </button>
+              <button
+                onClick={() => router.push("/calendar")}
+                className="flex-1 flex items-center gap-2 px-3 py-3 bg-white rounded-2xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors"
+              >
+                <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                  <FiCalendar className="text-blue-600" size={13} />
+                </div>
+                <span className="text-sm font-semibold text-gray-800">Calendar</span>
+              </button>
+            </div>
+
+            {/* Upcoming meetups */}
+            {upcomingMeetups.length > 0 && (
+              <div>
+                <p className="text-sm font-bold text-gray-800 mb-2">Upcoming Meetups</p>
+                <div className="space-y-2">
+                  {upcomingMeetups.map((m) => {
+                    const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
+                    return (
+                      <div
+                        key={m.id}
+                        onClick={() => router.push("/calendar")}
+                        className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                          <span className="text-xs font-bold text-blue-600">{d.getDate()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{m.personName}</p>
+                          <p className="text-xs text-gray-400 truncate">
+                            {d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            {m.location ? ` · ${m.location}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button onClick={() => router.push("/calendar")} className="w-full text-center text-xs font-semibold text-blue-600 py-1">
+                    See all →
+                  </button>
+                </div>
               </div>
-              <span className="flex-1 text-left text-sm font-semibold text-gray-800">Daily Summary</span>
-              <span className="text-gray-300 text-sm">›</span>
-            </button>
+            )}
 
             {/* Period selector */}
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
