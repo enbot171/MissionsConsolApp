@@ -32,6 +32,15 @@ function toDate(val) {
   return new Date(val);
 }
 
+function countMeetups(meetups, period) {
+  const start = getPeriodStart(period);
+  if (!start) return meetups.length;
+  return meetups.filter((m) => {
+    const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
+    return d >= start;
+  }).length;
+}
+
 function countTalkedTo(contacts, noContact, period) {
   const start = getPeriodStart(period);
   const all = [...contacts, ...noContact];
@@ -77,13 +86,14 @@ export default function Dashboard() {
   const [teamNoContact, setTeamNoContact] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [period, setPeriod] = useState("Weekly");
+  const [allMeetups, setAllMeetups] = useState([]);
   const [upcomingMeetups, setUpcomingMeetups] = useState([]);
 
   useEffect(() => {
     if (!user) return;
     setStatsLoading(true);
     const fetchAll = async () => {
-      const [mine, myNC, teamResult, allMeetups] = await Promise.all([
+      const [mine, myNC, teamResult, meetups] = await Promise.all([
         getPeopleByAssignee(user.uid),
         getNoContactByAssignee(user.uid),
         profile?.teamId
@@ -95,8 +105,9 @@ export default function Dashboard() {
       setMyNoContact(myNC);
       setTeamPeople(teamResult.people);
       setTeamNoContact(teamResult.noContact);
+      setAllMeetups(meetups);
       const now = new Date();
-      setUpcomingMeetups(allMeetups.filter((m) => {
+      setUpcomingMeetups(meetups.filter((m) => {
         const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
         return d >= now;
       }).slice(0, 3));
@@ -115,6 +126,7 @@ export default function Dashboard() {
 
   const myTalkedTo = statsLoading ? null : countTalkedTo(myPeople, myNoContact, period);
   const teamTalkedTo = statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period);
+  const myMeetupCount = statsLoading ? null : countMeetups(allMeetups, period);
 
   const myMetrics = [
     { label: "Talked To",        value: myTalkedTo,           border: "border-violet-600" },
@@ -123,6 +135,7 @@ export default function Dashboard() {
     { label: "Prayed For",       value: myStats?.prayedFor,   border: "border-teal-600" },
     { label: "Salvations",       value: myStats?.salvations,  border: "border-amber-600" },
     { label: "Active Disciples", value: myDisciples,          border: "border-emerald-700" },
+    { label: "Meetups",          value: myMeetupCount,        border: "border-pink-600" },
   ];
 
   const teamMetrics = [
