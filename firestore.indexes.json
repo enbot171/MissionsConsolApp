@@ -73,6 +73,14 @@
         { "fieldPath": "cgId", "order": "ASCENDING" },
         { "fieldPath": "dateStr", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "meetups",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "assignedTo", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
