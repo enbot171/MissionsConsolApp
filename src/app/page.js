@@ -292,6 +292,14 @@ export default function Dashboard() {
                     const isTexting = texting.has(p.id);
                     return (
                       <div key={p.id} className="bg-white rounded-xl border border-rose-100 shadow-sm px-4 py-3 flex items-center gap-3">
+                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/person/${p.id}`)}>
+                          <p className="text-sm font-semibold text-gray-900 truncate">{p.name}</p>
+                          <p className="text-xs text-rose-500 font-semibold">
+                            {isScheduledDue
+                              ? `Scheduled · ${scheduled.toLocaleDateString([], { month: "short", day: "numeric" })}`
+                              : days === 0 ? "Due today" : `${days}d overdue`}
+                          </p>
+                        </div>
                         {/* Checkbox */}
                         <button
                           onClick={() => handleTexted(p)}
@@ -302,14 +310,6 @@ export default function Dashboard() {
                         >
                           {isTexting && <FiCheck size={11} className="text-white" />}
                         </button>
-                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/person/${p.id}`)}>
-                          <p className="text-sm font-semibold text-gray-900 truncate">{p.name}</p>
-                          <p className="text-xs text-rose-500 font-semibold">
-                            {isScheduledDue
-                              ? `Scheduled · ${scheduled.toLocaleDateString([], { month: "short", day: "numeric" })}`
-                              : days === 0 ? "Due today" : `${days}d overdue`}
-                          </p>
-                        </div>
                       </div>
                     );
                   })}

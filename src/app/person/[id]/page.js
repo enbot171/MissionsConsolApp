@@ -143,7 +143,7 @@ export default function PersonView() {
         <button
           onClick={person.archived ? handleUnarchive : handleArchive}
           disabled={saving}
-          className={`flex flex-col items-center active:opacity-70 ${person.archived ? "text-blue-500" : "text-gray-600"}`}
+          className={`flex flex-col items-center active:opacity-70 ${person.archived ? "text-blue-500" : "text-red-500"}`}
         >
           <FaArchive size={18} />
           <span className="text-[10px] font-semibold mt-0.5">{person.archived ? "Unarchive" : "Archive"}</span>

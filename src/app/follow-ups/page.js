@@ -94,7 +94,13 @@ export default function FollowUps() {
   const router = useRouter();
   const [people, setPeople] = useState([]);
   const [fetching, setFetching] = useState(true);
-  const [acting, setActing] = useState({}); // { [id]: "checking" | "archiving" }
+  const [acting, setActing] = useState({});
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -134,10 +140,16 @@ export default function FollowUps() {
     await updatePerson(person.id, { archived: true });
     setPeople((prev) => prev.filter((p) => p.id !== person.id));
     clearAct(person.id);
+    showToast(`${person.name} archived`);
   };
 
   return (
     <PageShell title="Follow-ups">
+      {toast && (
+        <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white text-sm font-semibold px-4 py-2.5 rounded-2xl shadow-xl whitespace-nowrap">
+          {toast}
+        </div>
+      )}
       {fetching ? (
         <div className="flex justify-center py-12">
           <div className="w-6 h-6 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
@@ -254,18 +266,6 @@ function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, 
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
-      {/* Checkbox */}
-      <button
-        onClick={() => onCheck(person)}
-        disabled={busy}
-        title={checkLabel || "Mark as followed up"}
-        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 ${
-          isChecking ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"
-        }`}
-      >
-        {isChecking && <FiCheck size={11} className="text-white" />}
-      </button>
-
       {/* Info */}
       <div className="flex-1 min-w-0 cursor-pointer" onClick={onNavigate}>
         <p className="font-semibold text-gray-900 truncate">{person.name}</p>
@@ -290,12 +290,24 @@ function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, 
       <button
         onClick={() => onArchive(person)}
         disabled={busy}
-        title="Archive"
-        className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl bg-gray-50 text-gray-400 border border-gray-200 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 transition-colors"
+        className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 transition-colors"
       >
         {isArchiving
-          ? <span className="w-3 h-3 rounded-full border border-gray-400 border-t-transparent animate-spin" />
-          : <FiArchive size={13} />}
+          ? <span className="w-3 h-3 rounded-full border border-red-400 border-t-transparent animate-spin" />
+          : <FiArchive size={12} className="text-red-500" />}
+        <span className="text-xs font-semibold text-red-500">Archive</span>
+      </button>
+
+      {/* Checkbox */}
+      <button
+        onClick={() => onCheck(person)}
+        disabled={busy}
+        title={checkLabel || "Mark as followed up"}
+        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 ${
+          isChecking ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"
+        }`}
+      >
+        {isChecking && <FiCheck size={11} className="text-white" />}
       </button>
     </div>
   );
