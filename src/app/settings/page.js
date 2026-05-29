@@ -10,9 +10,7 @@ import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import { useSidebar } from "@/context/SidebarContext";
 import { FiLogOut, FiShield } from "react-icons/fi";
-
-const DEFAULT_FOLLOW_UP_DAYS = 3;
-const DEFAULT_INACTIVITY_DAYS = 30;
+import { DEFAULT_FOLLOW_UP_DAYS, DEFAULT_INACTIVITY_DAYS } from "@/config/app";
 
 export default function Settings() {
   const { user, profile, loading } = useRequireAuth();

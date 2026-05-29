@@ -7,14 +7,7 @@ import { getPerson, updatePerson, getCGsByTeam, getUsersByTeam, getCoreTeamsByTe
 import { Timestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
 import { FaArchive } from "react-icons/fa";
-import { CONTACT_TYPES, SOURCES, CONTACT_ROLES, MILESTONES } from "@/config/app";
-
-const roleStyles = {
-  Contact: "bg-blue-50 text-blue-600",
-  Disciple: "bg-emerald-50 text-emerald-600",
-  CGL: "bg-violet-50 text-violet-600",
-  "Core Team": "bg-orange-50 text-orange-600",
-};
+import { CONTACT_TYPES, SOURCES, CONTACT_ROLES, MILESTONES, ROLE_STYLES } from "@/config/app";
 
 export default function PersonView() {
   const { id } = useParams();
@@ -157,7 +150,7 @@ export default function PersonView() {
         </div>
         <div className="flex flex-wrap gap-1.5 justify-center">
           {(person.roles || []).map((r) => (
-            <span key={r} className={`text-xs px-2.5 py-1 rounded-full font-semibold ${roleStyles[r] || "bg-gray-100 text-gray-700"}`}>{r}</span>
+            <span key={r} className={`text-xs px-2.5 py-1 rounded-full font-semibold ${ROLE_STYLES[r] || "bg-gray-100 text-gray-700"}`}>{r}</span>
           ))}
           {person.archived && <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-gray-100 text-gray-700">Archived</span>}
         </div>

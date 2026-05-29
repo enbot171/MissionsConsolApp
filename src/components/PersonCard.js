@@ -1,13 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-
-const roleStyles = {
-  Contact: "bg-blue-50 text-blue-600",
-  Disciple: "bg-emerald-50 text-emerald-600",
-  CGL: "bg-violet-50 text-violet-600",
-  "Core Team": "bg-orange-50 text-orange-600",
-};
+import { ROLE_STYLES } from "@/config/app";
 
 export default function PersonCard({ person, onRemove, onSelect, selected }) {
   const router = useRouter();
@@ -41,7 +35,7 @@ export default function PersonCard({ person, onRemove, onSelect, selected }) {
         {(person.roles || []).length > 0 && (
           <div className="flex gap-1 mt-1.5 flex-wrap">
             {(person.roles || []).map((r) => (
-              <span key={r} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${roleStyles[r] || "bg-gray-100 text-gray-700"}`}>
+              <span key={r} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${ROLE_STYLES[r] || "bg-gray-100 text-gray-700"}`}>
                 {r}
               </span>
             ))}

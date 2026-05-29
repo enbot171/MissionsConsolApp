@@ -10,9 +10,7 @@ import SideNav from "@/components/SideNav";
 import Spinner from "@/components/Spinner";
 import { useSidebar } from "@/context/SidebarContext";
 import { FiClipboard, FiCalendar, FiBell, FiCheck } from "react-icons/fi";
-
-const DEFAULT_FOLLOW_UP_DAYS = 3;
-const DEFAULT_INACTIVITY_DAYS = 30;
+import { DEFAULT_FOLLOW_UP_DAYS, DEFAULT_INACTIVITY_DAYS } from "@/config/app";
 
 function getRefDate(p) {
   if (p.lastFollowedUpAt?.toDate) return p.lastFollowedUpAt.toDate();
@@ -42,16 +40,13 @@ function getOverduePeople(people, followUpDays, inactivityDays) {
       if (!ref) return false;
       const since = daysSince(ref);
       const interval = p.followUpDays ?? followUpDays;
-      // Type 1: one-time first follow-up (only if never followed up)
       const createdAt = p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : null);
       const sinceCreated = createdAt ? daysSince(createdAt) : null;
       const isType1 = !p.lastFollowedUpAt && sinceCreated !== null && sinceCreated >= interval;
-      // Type 2: inactivity check (recurring)
       const isType2 = since >= inactivityDays;
       return isType1 || isType2;
     })
     .sort((a, b) => {
-      // most overdue first (by days since ref relative to their interval)
       const refA = getRefDate(a), refB = getRefDate(b);
       const sinceA = refA ? daysSince(refA) : 0;
       const sinceB = refB ? daysSince(refB) : 0;

@@ -7,9 +7,7 @@ import { getPeopleByAssignee, updatePerson } from "@/lib/firestore";
 import { serverTimestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
 import { FiArchive, FiCheck } from "react-icons/fi";
-
-const DEFAULT_FOLLOW_UP_DAYS = 3;
-const DEFAULT_INACTIVITY_DAYS = 30;
+import { DEFAULT_FOLLOW_UP_DAYS, DEFAULT_INACTIVITY_DAYS, ROLE_STYLES } from "@/config/app";
 
 function daysSince(date) {
   return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
@@ -28,7 +26,7 @@ function getScheduledDate(person) {
   return new Date(person.scheduledFollowUpAt);
 }
 
-// Classify each person into exactly one type (priority: 3 > 2 > 1)
+// Priority order: Type 3 > Type 2 > Type 1 — each person lands in at most one bucket
 function classifyPeople(people, followUpDays, inactivityDays) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -41,19 +39,17 @@ function classifyPeople(people, followUpDays, inactivityDays) {
     const since = ref ? daysSince(ref) : null;
     const interval = p.followUpDays ?? followUpDays;
 
-    // Type 3: manual scheduled date reached
     if (scheduled && scheduled <= today) {
       type3.push({ ...p, _scheduled: scheduled });
       return;
     }
 
-    // Type 2: inactive for inactivityDays+
     if (since !== null && since >= inactivityDays) {
       type2.push({ ...p, _since: since });
       return;
     }
 
-    // Type 1: first follow-up only — fires once after createdAt + interval, never again
+    // fires once after createdAt + interval, never again after first check-in
     const createdAt = p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : null);
     const daysSinceCreated = createdAt ? daysSince(createdAt) : null;
     if (!p.lastFollowedUpAt && daysSinceCreated !== null && daysSinceCreated >= interval) {
@@ -61,7 +57,6 @@ function classifyPeople(people, followUpDays, inactivityDays) {
       return;
     }
 
-    // Coming up: due within next 7 days (Type 1) or scheduled within 7 days (Type 3)
     const dueIn = since !== null ? interval - since : null;
     const scheduledIn = scheduled ? Math.ceil((scheduled - today) / (1000 * 60 * 60 * 24)) : null;
 
@@ -81,13 +76,6 @@ function classifyPeople(people, followUpDays, inactivityDays) {
 
   return { type1, type2, type3, upcoming };
 }
-
-const roleStyles = {
-  Contact: "bg-blue-50 text-blue-600",
-  Disciple: "bg-emerald-50 text-emerald-600",
-  CGL: "bg-violet-50 text-violet-600",
-  "Core Team": "bg-orange-50 text-orange-600",
-};
 
 export default function FollowUps() {
   const { user, profile, loading } = useRequireAuth();
@@ -163,7 +151,6 @@ export default function FollowUps() {
       ) : (
         <div className="space-y-6">
 
-          {/* Type 3 — Scheduled */}
           {type3.length > 0 && (
             <Section label="Scheduled" count={type3.length} accent="text-blue-600">
               {type3.map((p) => (
@@ -181,7 +168,6 @@ export default function FollowUps() {
             </Section>
           )}
 
-          {/* Type 2 — Inactivity check */}
           {type2.length > 0 && (
             <Section label="Check if still active" count={type2.length} accent="text-orange-500">
               <p className="text-xs text-gray-400 -mt-1">
@@ -203,7 +189,6 @@ export default function FollowUps() {
             </Section>
           )}
 
-          {/* Type 1 — Regular follow-up */}
           {type1.length > 0 && (
             <Section label="Follow up" count={type1.length} accent="text-rose-500">
               {type1.map((p) => (
@@ -221,7 +206,6 @@ export default function FollowUps() {
             </Section>
           )}
 
-          {/* Coming up */}
           {upcoming.length > 0 && (
             <Section label="Coming up" count={upcoming.length} accent="text-gray-400">
               {upcoming.map((p) => {
@@ -266,7 +250,6 @@ function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, 
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
-      {/* Info */}
       <div className="flex-1 min-w-0 cursor-pointer" onClick={onNavigate}>
         <p className="font-semibold text-gray-900 truncate">{person.name}</p>
         <p className="text-sm text-gray-500 truncate">
@@ -275,7 +258,7 @@ function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, 
         </p>
         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
           {(person.roles || []).map((r) => (
-            <span key={r} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${roleStyles[r] || "bg-gray-100 text-gray-700"}`}>
+            <span key={r} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${ROLE_STYLES[r] || "bg-gray-100 text-gray-700"}`}>
               {r}
             </span>
           ))}
@@ -286,7 +269,6 @@ function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, 
         </div>
       </div>
 
-      {/* Archive */}
       <button
         onClick={() => onArchive(person)}
         disabled={busy}
@@ -298,7 +280,6 @@ function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, 
         <span className="text-xs font-semibold text-red-500">Archive</span>
       </button>
 
-      {/* Checkbox */}
       <button
         onClick={() => onCheck(person)}
         disabled={busy}
