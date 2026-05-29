@@ -53,9 +53,11 @@ function classifyPeople(people, followUpDays, inactivityDays) {
       return;
     }
 
-    // Type 1: regular cadence overdue
-    if (since !== null && since >= interval) {
-      type1.push({ ...p, _daysOverdue: since - interval });
+    // Type 1: first follow-up only — fires once after createdAt + interval, never again
+    const createdAt = p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : null);
+    const daysSinceCreated = createdAt ? daysSince(createdAt) : null;
+    if (!p.lastFollowedUpAt && daysSinceCreated !== null && daysSinceCreated >= interval) {
+      type1.push({ ...p, _daysOverdue: daysSinceCreated - interval });
       return;
     }
 

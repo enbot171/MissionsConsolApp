@@ -42,7 +42,13 @@ function getOverduePeople(people, followUpDays, inactivityDays) {
       if (!ref) return false;
       const since = daysSince(ref);
       const interval = p.followUpDays ?? followUpDays;
-      return since >= interval; // includes Type 1 and Type 2
+      // Type 1: one-time first follow-up (only if never followed up)
+      const createdAt = p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : null);
+      const sinceCreated = createdAt ? daysSince(createdAt) : null;
+      const isType1 = !p.lastFollowedUpAt && sinceCreated !== null && sinceCreated >= interval;
+      // Type 2: inactivity check (recurring)
+      const isType2 = since >= inactivityDays;
+      return isType1 || isType2;
     })
     .sort((a, b) => {
       // most overdue first (by days since ref relative to their interval)
