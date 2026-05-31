@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getPerson, updatePerson, getCGsByTeam, getUsersByTeam, getCoreTeamsByTeam } from "@/lib/firestore";
+import { getPerson, updatePerson, getCGsByTeam, getUsersByTeam, getCoreTeamsByTeam, getMeetupsByPerson } from "@/lib/firestore";
 import { Timestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
 import { FaArchive } from "react-icons/fa";
+import { FiCalendar } from "react-icons/fi";
 import { CONTACT_TYPES, SOURCES, CONTACT_ROLES, MILESTONES, ROLE_STYLES } from "@/config/app";
 
 export default function PersonView() {
@@ -18,6 +19,7 @@ export default function PersonView() {
   const [cgs, setCgs] = useState([]);
   const [users, setUsers] = useState([]);
   const [coreTeams, setCoreTeams] = useState([]);
+  const [meetups, setMeetups] = useState([]);
   const [fetching, setFetching] = useState(true);
   const [tab, setTab] = useState("info");
   const [saving, setSaving] = useState(false);
@@ -29,12 +31,19 @@ export default function PersonView() {
 
   useEffect(() => {
     if (!profile?.teamId) return;
-    Promise.all([getPerson(id), getCGsByTeam(profile.teamId), getUsersByTeam(profile.teamId), getCoreTeamsByTeam(profile.teamId)]).then(([p, c, u, ct]) => {
+    Promise.all([
+      getPerson(id),
+      getCGsByTeam(profile.teamId),
+      getUsersByTeam(profile.teamId),
+      getCoreTeamsByTeam(profile.teamId),
+      getMeetupsByPerson(id),
+    ]).then(([p, c, u, ct, m]) => {
       setPerson(p);
       setForm(p);
       setCgs(c);
       setUsers(u);
       setCoreTeams(ct);
+      setMeetups(m);
       setFetching(false);
     });
   }, [id, profile?.teamId]);
@@ -133,14 +142,23 @@ export default function PersonView() {
       title={person.name}
       backHref="/people"
       rightAction={
-        <button
-          onClick={person.archived ? handleUnarchive : handleArchive}
-          disabled={saving}
-          className={`flex flex-col items-center active:opacity-70 ${person.archived ? "text-blue-500" : "text-red-500"}`}
-        >
-          <FaArchive size={18} />
-          <span className="text-[10px] font-semibold mt-0.5">{person.archived ? "Unarchive" : "Archive"}</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push(`/calendar?scheduleFor=${id}&name=${encodeURIComponent(person.name)}`)}
+            className="flex flex-col items-center text-blue-500 active:opacity-70"
+          >
+            <FiCalendar size={18} />
+            <span className="text-[10px] font-semibold mt-0.5">Schedule</span>
+          </button>
+          <button
+            onClick={person.archived ? handleUnarchive : handleArchive}
+            disabled={saving}
+            className={`flex flex-col items-center active:opacity-70 ${person.archived ? "text-blue-500" : "text-red-500"}`}
+          >
+            <FaArchive size={18} />
+            <span className="text-[10px] font-semibold mt-0.5">{person.archived ? "Unarchive" : "Archive"}</span>
+          </button>
+        </div>
       }
     >
       {/* Avatar + role chips */}
@@ -161,7 +179,7 @@ export default function PersonView() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-4">
-        {["info", "progress", "network"].map((t) => (
+        {["info", "progress", "network", "meetings"].map((t) => (
           <button
             key={t}
             onClick={() => { setTab(t); setError(""); }}
@@ -199,11 +217,11 @@ export default function PersonView() {
             <Field label="Met At" value={form.metAt || ""} onChange={(v) => set("metAt", v)} />
             <Field label="Remarks" value={form.description || ""} onChange={(v) => set("description", v)} textarea />
             <Field
-              label="Follow-up every (days)"
+              label="Subsequent follow-up interval (days)"
               type="number"
               value={form.followUpDays ?? ""}
               onChange={(v) => set("followUpDays", v === "" ? null : parseInt(v) || null)}
-              placeholder="Use global default"
+              placeholder="None"
             />
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-700">Scheduled follow-up</label>
@@ -371,16 +389,59 @@ export default function PersonView() {
         </div>
       )}
 
-      {/* Single save button — always visible */}
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="w-full mt-4 py-3 bg-linear-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
-      >
-        {saving ? "Saving…" : "Save Changes"}
-      </button>
-      {saved && (
-        <p className="text-center text-sm font-medium text-emerald-600 mt-2">Changes saved.</p>
+      {/* ── MEETINGS TAB ── */}
+      {tab === "meetings" && (
+        <div className="space-y-3">
+          {meetups.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+              <p className="text-sm font-semibold text-gray-700">No meetings yet</p>
+              <p className="text-xs text-gray-400 mt-1">Tap Schedule above to book one.</p>
+            </div>
+          ) : (
+            meetups.map((m) => {
+              const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
+              const isPast = d < new Date();
+              return (
+                <div key={m.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isPast ? "bg-gray-100" : "bg-blue-50"}`}>
+                    <span className={`text-sm font-bold ${isPast ? "text-gray-500" : "text-blue-600"}`}>{d.getDate()}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                      {" · "}
+                      {d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                    {m.location && <p className="text-xs text-gray-500 mt-0.5">{m.location}</p>}
+                    {m.notes && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{m.notes}</p>}
+                  </div>
+                  {m.completed === true && (
+                    <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full shrink-0">Done</span>
+                  )}
+                  {m.completed === false && (
+                    <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">Missed</span>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* Single save button — hidden on meetings tab */}
+      {tab !== "meetings" && (
+        <>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full mt-4 py-3 bg-linear-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
+          >
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+          {saved && (
+            <p className="text-center text-sm font-medium text-emerald-600 mt-2">Changes saved.</p>
+          )}
+        </>
       )}
     </PageShell>
   );

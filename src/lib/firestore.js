@@ -294,6 +294,16 @@ export const addMeetup = async (data) => {
   return ref.id;
 };
 
+export const getMeetupsByPerson = async (personId) => {
+  const q = query(
+    collection(db, "meetups"),
+    where("personId", "==", personId),
+    orderBy("date", "desc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
 export const getMeetupsByAssignee = async (uid) => {
   const q = query(
     collection(db, "meetups"),
