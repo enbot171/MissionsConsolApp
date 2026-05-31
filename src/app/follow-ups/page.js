@@ -235,11 +235,8 @@ function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, 
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
       <div className="flex-1 min-w-0 cursor-pointer" onClick={onNavigate}>
         <p className="font-semibold text-gray-900 truncate">{person.name}</p>
-        <p className="text-sm text-gray-500 truncate">
-          {person.contactType && <span className="text-gray-400">Contact Type: </span>}
-          {person.contactType && <span>{person.contactType}</span>}
-          {person.contactType && person.contact && <span> · </span>}
-          {person.contact}
+        <p className="text-sm text-gray-700 truncate">
+          {person.contactType ? `${person.contactType} - ${person.contact}` : person.contact}
         </p>
         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
           {(person.roles || []).map((r) => (
@@ -249,7 +246,7 @@ function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, 
           ))}
           <span className={`text-[10px] font-semibold ${badgeColor}`}>{badge}</span>
           {person.followUpDays && (
-            <span className="text-[10px] text-gray-400">· every {person.followUpDays}d</span>
+            <span className="text-[10px] text-gray-500">· every {person.followUpDays}d</span>
           )}
         </div>
       </div>

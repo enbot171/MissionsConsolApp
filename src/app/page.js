@@ -289,6 +289,11 @@ export default function Dashboard() {
                       <div key={p.id} className="bg-white rounded-xl border border-rose-100 shadow-sm px-4 py-3 flex items-center gap-3">
                         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/person/${p.id}`)}>
                           <p className="text-sm font-semibold text-gray-900 truncate">{p.name}</p>
+                          {(p.contactType || p.contact) && (
+                            <p className="text-xs text-gray-600 truncate">
+                              {p.contactType ? `${p.contactType} - ${p.contact}` : p.contact}
+                            </p>
+                          )}
                           <p className="text-xs text-rose-500 font-semibold">
                             {isScheduledDue
                               ? `Scheduled · ${scheduled.toLocaleDateString([], { month: "short", day: "numeric" })}`

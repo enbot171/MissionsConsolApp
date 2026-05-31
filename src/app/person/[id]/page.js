@@ -142,23 +142,14 @@ export default function PersonView() {
       title={person.name}
       backHref="/people"
       rightAction={
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push(`/calendar?scheduleFor=${id}&name=${encodeURIComponent(person.name)}`)}
-            className="flex flex-col items-center text-blue-500 active:opacity-70"
-          >
-            <FiCalendar size={18} />
-            <span className="text-[10px] font-semibold mt-0.5">Schedule</span>
-          </button>
-          <button
-            onClick={person.archived ? handleUnarchive : handleArchive}
-            disabled={saving}
-            className={`flex flex-col items-center active:opacity-70 ${person.archived ? "text-blue-500" : "text-red-500"}`}
-          >
-            <FaArchive size={18} />
-            <span className="text-[10px] font-semibold mt-0.5">{person.archived ? "Unarchive" : "Archive"}</span>
-          </button>
-        </div>
+        <button
+          onClick={person.archived ? handleUnarchive : handleArchive}
+          disabled={saving}
+          className={`flex flex-col items-center active:opacity-70 ${person.archived ? "text-blue-500" : "text-red-500"}`}
+        >
+          <FaArchive size={18} />
+          <span className="text-[10px] font-semibold mt-0.5">{person.archived ? "Unarchive" : "Archive"}</span>
+        </button>
       }
     >
       {/* Avatar + role chips */}
@@ -173,7 +164,7 @@ export default function PersonView() {
           {person.archived && <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-gray-100 text-gray-700">Archived</span>}
         </div>
         <p className="text-gray-600 text-sm mt-1">
-          {person.contactType && `${person.contactType} · `}{person.contact}
+          {person.contactType ? `${person.contactType} - ${person.contact}` : person.contact}
         </p>
       </div>
 
@@ -392,10 +383,17 @@ export default function PersonView() {
       {/* ── MEETINGS TAB ── */}
       {tab === "meetings" && (
         <div className="space-y-3">
+          <button
+            onClick={() => router.push(`/calendar?scheduleFor=${id}&name=${encodeURIComponent(person.name)}`)}
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            <FiCalendar size={14} />
+            Schedule Meeting
+          </button>
           {meetups.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
               <p className="text-sm font-semibold text-gray-700">No meetings yet</p>
-              <p className="text-xs text-gray-400 mt-1">Tap Schedule above to book one.</p>
+              <p className="text-xs text-gray-400 mt-1">Schedule one above.</p>
             </div>
           ) : (
             meetups.map((m) => {
