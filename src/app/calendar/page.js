@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import {
   getPeopleByAssigneeForMonth,
@@ -36,6 +36,22 @@ function formatMeetupTime(ts) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function ScheduleForHandler({ setForm, setSearch, setModal }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const scheduleFor = searchParams.get("scheduleFor");
+    const name = searchParams.get("name");
+    if (scheduleFor && name) {
+      setForm({ personId: scheduleFor, personName: name, date: "", location: "", notes: "" });
+      setSearch(name);
+      setModal({ mode: "add" });
+      router.replace("/calendar");
+    }
+  }, [searchParams]);
+  return null;
+}
+
 export default function CalendarPage() {
   const { user, profile, loading } = useRequireAuth();
   const router = useRouter();
@@ -46,7 +62,7 @@ export default function CalendarPage() {
   const [peopleByDay, setPeopleByDay] = useState({});
   const [meetups, setMeetups] = useState([]);
   const [myPeople, setMyPeople] = useState([]);
-  const [modal, setModal] = useState(null); // null | { mode: "add"|"edit", meetup?, date? }
+  const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ personId: "", personName: "", date: "", location: "", notes: "" });
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
@@ -155,6 +171,10 @@ export default function CalendarPage() {
         </button>
       }
     >
+      <Suspense fallback={null}>
+        <ScheduleForHandler setForm={setForm} setSearch={setSearch} setModal={setModal} />
+      </Suspense>
+
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-4">
         <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">

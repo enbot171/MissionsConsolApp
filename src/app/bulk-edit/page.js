@@ -45,6 +45,34 @@ const COLUMNS = [
 
 const EXCLUSIVE_ROLES = ["Contact", "Disciple"];
 
+// Proper TSV parser — handles quoted fields with embedded newlines and tabs (Google Sheets format)
+function parseTSV(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === '"') {
+      i++;
+      while (i < text.length) {
+        if (text[i] === '"' && text[i + 1] === '"') { cell += '"'; i += 2; }
+        else if (text[i] === '"') { i++; break; }
+        else { cell += text[i++]; }
+      }
+    } else if (text[i] === '\t') {
+      row.push(cell); cell = ""; i++;
+    } else if (text[i] === '\r' && text[i + 1] === '\n') {
+      row.push(cell); rows.push(row); row = []; cell = ""; i += 2;
+    } else if (text[i] === '\n') {
+      row.push(cell); rows.push(row); row = []; cell = ""; i++;
+    } else {
+      cell += text[i++];
+    }
+  }
+  if (cell || row.length > 0) { row.push(cell); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c !== ""));
+}
+
 let _uid = 0;
 const blankRow = () => ({
   _isNew: true,
@@ -169,18 +197,17 @@ export default function BulkEdit() {
     const onPaste = (e) => {
       if (focusedCell === null) return;
       const text = e.clipboardData.getData("text/plain");
-      const pasteRows = text.split(/\r?\n/).filter((r) => r !== "");
-      if (pasteRows.length <= 1 && !pasteRows[0]?.includes("\t")) return;
+      const pasteRows = parseTSV(text);
+      if (pasteRows.length === 0 || (pasteRows.length === 1 && pasteRows[0].length <= 1)) return;
       e.preventDefault();
 
       const { row: startRow, col: startCol } = focusedCell;
       setRows((prev) => {
         const next = [...prev];
         const newDirty = new Set();
-        pasteRows.forEach((pasteRow, ri) => {
+        pasteRows.forEach((cells, ri) => {
           const rowIndex = startRow + ri;
           if (rowIndex >= next.length) return;
-          const cells = pasteRow.split("\t");
           let updated = { ...next[rowIndex] };
           cells.forEach((raw, ci) => {
             const colIndex = startCol + ci;

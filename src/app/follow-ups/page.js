@@ -13,68 +13,54 @@ function daysSince(date) {
   return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function getRefDate(person) {
-  if (person.lastFollowedUpAt?.toDate) return person.lastFollowedUpAt.toDate();
-  if (person.createdAt?.toDate) return person.createdAt.toDate();
-  if (person.createdAt) return new Date(person.createdAt);
-  return null;
-}
-
-function getScheduledDate(person) {
-  if (!person.scheduledFollowUpAt) return null;
-  if (person.scheduledFollowUpAt.toDate) return person.scheduledFollowUpAt.toDate();
-  return new Date(person.scheduledFollowUpAt);
-}
-
-// Priority order: Type 3 > Type 2 > Type 1 — each person lands in at most one bucket
-function classifyPeople(people, followUpDays, inactivityDays) {
+function classifyPeople(people, firstFollowUpDays, inactivityDays) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const type3 = [], type2 = [], type1 = [], upcoming = [];
+  const scheduled = [], newContact = [], followUpDue = [], inactive = [];
 
   people.forEach((p) => {
-    const ref = getRefDate(p);
-    const scheduled = getScheduledDate(p);
-    const since = ref ? daysSince(ref) : null;
-    const interval = p.followUpDays ?? followUpDays;
+    const lastFollowedUp = p.lastFollowedUpAt?.toDate ? p.lastFollowedUpAt.toDate() : null;
+    const created = p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : null);
+    const scheduledDate = p.scheduledFollowUpAt?.toDate
+      ? p.scheduledFollowUpAt.toDate()
+      : (p.scheduledFollowUpAt ? new Date(p.scheduledFollowUpAt) : null);
+    const interval = p.followUpDays ?? null;
 
-    if (scheduled && scheduled <= today) {
-      type3.push({ ...p, _scheduled: scheduled });
+    // Scheduled date takes full control — only show when past due
+    if (scheduledDate) {
+      const dueIn = Math.ceil((scheduledDate - today) / (1000 * 60 * 60 * 24));
+      if (dueIn <= 0) scheduled.push({ ...p, _scheduled: scheduledDate });
       return;
     }
 
-    if (since !== null && since >= inactivityDays) {
-      type2.push({ ...p, _since: since });
+    // Interval-based (uses lastFollowedUpAt if exists, else createdAt)
+    if (interval) {
+      const ref = lastFollowedUp || created;
+      const since = ref ? daysSince(ref) : null;
+      if (since !== null && since >= interval) followUpDue.push({ ...p, _daysOverdue: since - interval });
       return;
     }
 
-    // fires once after createdAt + interval, never again after first check-in
-    const createdAt = p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : null);
-    const daysSinceCreated = createdAt ? daysSince(createdAt) : null;
-    if (!p.lastFollowedUpAt && daysSinceCreated !== null && daysSinceCreated >= interval) {
-      type1.push({ ...p, _daysOverdue: daysSinceCreated - interval });
+    // No schedule, no interval
+    if (!lastFollowedUp) {
+      // New contact — use global first follow-up threshold
+      const since = created ? daysSince(created) : null;
+      if (since !== null && since >= firstFollowUpDays) newContact.push({ ...p, _daysOverdue: since - firstFollowUpDays });
       return;
     }
 
-    const dueIn = since !== null ? interval - since : null;
-    const scheduledIn = scheduled ? Math.ceil((scheduled - today) / (1000 * 60 * 60 * 24)) : null;
-
-    if ((dueIn !== null && dueIn <= 7) || (scheduledIn !== null && scheduledIn <= 7)) {
-      upcoming.push({ ...p, _dueIn: dueIn, _scheduledIn: scheduledIn });
-    }
+    // Has been followed up, chose no interval/schedule → inactivity
+    const since = daysSince(lastFollowedUp);
+    if (since >= inactivityDays) inactive.push({ ...p, _since: since });
   });
 
-  type3.sort((a, b) => a._scheduled - b._scheduled);
-  type2.sort((a, b) => b._since - a._since);
-  type1.sort((a, b) => b._daysOverdue - a._daysOverdue);
-  upcoming.sort((a, b) => {
-    const aMin = Math.min(a._dueIn ?? 99, a._scheduledIn ?? 99);
-    const bMin = Math.min(b._dueIn ?? 99, b._scheduledIn ?? 99);
-    return aMin - bMin;
-  });
+  scheduled.sort((a, b) => a._scheduled - b._scheduled);
+  newContact.sort((a, b) => b._daysOverdue - a._daysOverdue);
+  followUpDue.sort((a, b) => b._daysOverdue - a._daysOverdue);
+  inactive.sort((a, b) => b._since - a._since);
 
-  return { type1, type2, type3, upcoming };
+  return { scheduled, newContact, followUpDue, inactive };
 }
 
 export default function FollowUps() {
@@ -103,8 +89,8 @@ export default function FollowUps() {
   const followUpDays = profile?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
   const inactivityDays = profile?.inactivityCheckDays ?? DEFAULT_INACTIVITY_DAYS;
 
-  const { type1, type2, type3, upcoming } = classifyPeople(people, followUpDays, inactivityDays);
-  const totalDue = type1.length + type2.length + type3.length;
+  const { scheduled, newContact, followUpDue, inactive } = classifyPeople(people, followUpDays, inactivityDays);
+  const totalDue = scheduled.length + newContact.length + followUpDue.length + inactive.length;
 
   const setAct = (id, val) => setActing((prev) => ({ ...prev, [id]: val }));
   const clearAct = (id) => setActing((prev) => { const n = { ...prev }; delete n[id]; return n; });
@@ -142,18 +128,18 @@ export default function FollowUps() {
         <div className="flex justify-center py-12">
           <div className="w-6 h-6 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
         </div>
-      ) : totalDue === 0 && upcoming.length === 0 ? (
+      ) : totalDue === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
           <p className="text-2xl mb-2">🎉</p>
           <p className="font-semibold text-gray-800">Everyone's up to date!</p>
-          <p className="text-sm text-gray-400 mt-1">No follow-ups due in the next 7 days.</p>
+          <p className="text-sm text-gray-400 mt-1">No follow-ups due right now.</p>
         </div>
       ) : (
         <div className="space-y-6">
 
-          {type3.length > 0 && (
-            <Section label="Scheduled" count={type3.length} accent="text-blue-600">
-              {type3.map((p) => (
+          {scheduled.length > 0 && (
+            <Section label="Scheduled" count={scheduled.length} accent="text-blue-600">
+              {scheduled.map((p) => (
                 <PersonRow
                   key={p.id}
                   person={p}
@@ -168,12 +154,46 @@ export default function FollowUps() {
             </Section>
           )}
 
-          {type2.length > 0 && (
-            <Section label="Check if still active" count={type2.length} accent="text-orange-500">
+          {newContact.length > 0 && (
+            <Section label="New contacts" count={newContact.length} accent="text-rose-500">
+              {newContact.map((p) => (
+                <PersonRow
+                  key={p.id}
+                  person={p}
+                  badge={p._daysOverdue === 0 ? "First follow-up due" : `First follow-up · ${p._daysOverdue}d overdue`}
+                  badgeColor="text-rose-500"
+                  onNavigate={() => router.push(`/person/${p.id}`)}
+                  onCheck={handleCheck}
+                  onArchive={handleArchive}
+                  acting={acting[p.id]}
+                />
+              ))}
+            </Section>
+          )}
+
+          {followUpDue.length > 0 && (
+            <Section label="Follow up" count={followUpDue.length} accent="text-indigo-500">
+              {followUpDue.map((p) => (
+                <PersonRow
+                  key={p.id}
+                  person={p}
+                  badge={p._daysOverdue === 0 ? "Due today" : `${p._daysOverdue}d overdue`}
+                  badgeColor="text-indigo-500"
+                  onNavigate={() => router.push(`/person/${p.id}`)}
+                  onCheck={handleCheck}
+                  onArchive={handleArchive}
+                  acting={acting[p.id]}
+                />
+              ))}
+            </Section>
+          )}
+
+          {inactive.length > 0 && (
+            <Section label="Check if still active" count={inactive.length} accent="text-orange-500">
               <p className="text-xs text-gray-400 -mt-1">
-                These people haven't been followed up with in {inactivityDays}+ days. Still active or archive?
+                No scheduled meeting or interval set — haven't been met in {inactivityDays}+ days.
               </p>
-              {type2.map((p) => (
+              {inactive.map((p) => (
                 <PersonRow
                   key={p.id}
                   person={p}
@@ -186,43 +206,6 @@ export default function FollowUps() {
                   checkLabel="Still active"
                 />
               ))}
-            </Section>
-          )}
-
-          {type1.length > 0 && (
-            <Section label="Follow up" count={type1.length} accent="text-rose-500">
-              {type1.map((p) => (
-                <PersonRow
-                  key={p.id}
-                  person={p}
-                  badge={p._daysOverdue === 0 ? "Due today" : `${p._daysOverdue}d overdue`}
-                  badgeColor="text-rose-500"
-                  onNavigate={() => router.push(`/person/${p.id}`)}
-                  onCheck={handleCheck}
-                  onArchive={handleArchive}
-                  acting={acting[p.id]}
-                />
-              ))}
-            </Section>
-          )}
-
-          {upcoming.length > 0 && (
-            <Section label="Coming up" count={upcoming.length} accent="text-gray-400">
-              {upcoming.map((p) => {
-                const dueIn = p._dueIn !== null ? p._dueIn : p._scheduledIn;
-                return (
-                  <PersonRow
-                    key={p.id}
-                    person={p}
-                    badge={dueIn === 0 ? "Due today" : `In ${dueIn}d`}
-                    badgeColor="text-amber-500"
-                    onNavigate={() => router.push(`/person/${p.id}`)}
-                    onCheck={handleCheck}
-                    onArchive={handleArchive}
-                    acting={acting[p.id]}
-                  />
-                );
-              })}
             </Section>
           )}
 
@@ -253,7 +236,9 @@ function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, 
       <div className="flex-1 min-w-0 cursor-pointer" onClick={onNavigate}>
         <p className="font-semibold text-gray-900 truncate">{person.name}</p>
         <p className="text-sm text-gray-500 truncate">
-          {person.contactType && <span>{person.contactType} · </span>}
+          {person.contactType && <span className="text-gray-400">Contact Type: </span>}
+          {person.contactType && <span>{person.contactType}</span>}
+          {person.contactType && person.contact && <span> · </span>}
           {person.contact}
         </p>
         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
