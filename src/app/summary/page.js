@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { getPeopleByAssigneeAndDate, getMeetupsByAssignee, updateMeetup } from "@/lib/firestore";
 import PageShell from "@/components/PageShell";
 
@@ -29,6 +29,7 @@ export default function Summary() {
 function SummaryInner() {
   const { user, loading } = useRequireAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [all, setAll] = useState([]);
   const [allMeetups, setAllMeetups] = useState([]);
   const [fetching, setFetching] = useState(true);
@@ -115,7 +116,7 @@ function SummaryInner() {
             {sorted.length > 0 && (
               <div className="space-y-2">
                 {sorted.map((person) => (
-                  <PersonRow key={person.id} person={person} />
+                  <PersonRow key={person.id} person={person} onClick={() => router.push(`/person/${person.id}`)} />
                 ))}
               </div>
             )}
@@ -138,10 +139,10 @@ function SummaryInner() {
   );
 }
 
-function PersonRow({ person }) {
+function PersonRow({ person, onClick }) {
   const isNoContact = person.noContact === true;
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+    <div onClick={onClick} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 cursor-pointer active:bg-gray-50 transition-colors">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">

@@ -295,13 +295,14 @@ export const addMeetup = async (data) => {
 };
 
 export const getMeetupsByPerson = async (personId) => {
-  const q = query(
-    collection(db, "meetups"),
-    where("personId", "==", personId),
-    orderBy("date", "desc")
-  );
+  const q = query(collection(db, "meetups"), where("personId", "==", personId));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return docs.sort((a, b) => {
+    const da = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+    const db_ = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+    return db_ - da;
+  });
 };
 
 export const getMeetupsByAssignee = async (uid) => {

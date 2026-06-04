@@ -36,16 +36,15 @@ export default function PersonView() {
       getCGsByTeam(profile.teamId),
       getUsersByTeam(profile.teamId),
       getCoreTeamsByTeam(profile.teamId),
-      getMeetupsByPerson(id),
-    ]).then(([p, c, u, ct, m]) => {
+    ]).then(([p, c, u, ct]) => {
       setPerson(p);
       setForm(p);
       setCgs(c);
       setUsers(u);
       setCoreTeams(ct);
-      setMeetups(m);
       setFetching(false);
     });
+    getMeetupsByPerson(id).then(setMeetups).catch(() => setMeetups([]));
   }, [id, profile?.teamId]);
 
   const set = useCallback((k, v) => setForm((f) => ({ ...f, [k]: v })), []);
@@ -59,36 +58,32 @@ export default function PersonView() {
     setSaving(true); setError("");
     try {
       await updatePerson(id, {
-        // info
-        name: form.name,
-        contactType: form.contactType,
-        contact: form.contact,
-        source: form.source,
-        age: form.age,
-        address: form.address,
-        metAt: form.metAt,
-        description: form.description,
-        roles: form.roles,
-        ministries: form.ministries,
+        name: form.name ?? null,
+        contactType: form.contactType ?? null,
+        contact: form.contact ?? null,
+        source: form.source ?? null,
+        age: form.age ?? null,
+        address: form.address ?? null,
+        metAt: form.metAt ?? null,
+        description: form.description ?? null,
+        roles: form.roles ?? [],
+        ministries: form.ministries ?? [],
         teamId: profile?.teamId || form.teamId || "",
         createdAt: form.createdAt instanceof Date
           ? Timestamp.fromDate(form.createdAt)
-          : form.createdAt,
-        // progress
-        gospelShared: form.gospelShared,
-        prayed: form.prayed,
-        saved: form.saved,
+          : (form.createdAt ?? null),
+        gospelShared: form.gospelShared ?? false,
+        prayed: form.prayed ?? false,
+        saved: form.saved ?? false,
         milestones: form.milestones || {},
         progressRemarks: form.progressRemarks || "",
-        // follow-up
         ...(form.followUpDays != null ? { followUpDays: parseInt(form.followUpDays) || null } : {}),
         scheduledFollowUpAt: form.scheduledFollowUpAt instanceof Date
           ? Timestamp.fromDate(form.scheduledFollowUpAt)
           : (form.scheduledFollowUpAt ?? null),
-        // network
-        cgId: form.cgId,
-        assignedTo: form.assignedTo,
-        assignedToName: form.assignedToName,
+        cgId: form.cgId ?? null,
+        assignedTo: form.assignedTo ?? null,
+        assignedToName: form.assignedToName ?? null,
       });
       setPerson((p) => ({ ...p, ...form }));
       showSaved();
