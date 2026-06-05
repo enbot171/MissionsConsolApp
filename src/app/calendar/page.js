@@ -330,7 +330,7 @@ export default function CalendarPage() {
 
       {/* Meetup modal */}
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
+        <div className="fixed inset-0 z-60 flex items-end md:items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setModal(null)} />
           <div className="relative bg-white w-full max-w-md rounded-t-3xl md:rounded-2xl shadow-xl flex flex-col" style={{ maxHeight: "85vh" }}>
             {/* Header */}
