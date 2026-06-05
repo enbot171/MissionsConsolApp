@@ -332,7 +332,7 @@ export default function CalendarPage() {
       {modal && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setModal(null)} />
-          <div className="relative bg-white w-full max-w-md rounded-t-3xl md:rounded-2xl shadow-xl flex flex-col max-h-[85dvh]">
+          <div className="relative bg-white w-full max-w-md rounded-t-3xl md:rounded-2xl shadow-xl flex flex-col" style={{ maxHeight: "85vh" }}>
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-6 pb-2 shrink-0">
               <p className="font-bold text-gray-900">{modal.mode === "add" ? "Schedule Meetup" : "Edit Meetup"}</p>
@@ -342,7 +342,7 @@ export default function CalendarPage() {
             </div>
 
             {/* Scrollable fields */}
-            <div className="overflow-y-auto flex-1 px-6 py-2 space-y-4">
+            <div className="overflow-y-auto flex-1 min-h-0 px-6 py-2 space-y-4">
               {/* Person picker */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-700">Person *</label>
