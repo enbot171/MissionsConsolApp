@@ -332,80 +332,85 @@ export default function CalendarPage() {
       {modal && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setModal(null)} />
-          <div className="relative bg-white w-full max-w-md rounded-t-3xl md:rounded-2xl p-6 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between">
+          <div className="relative bg-white w-full max-w-md rounded-t-3xl md:rounded-2xl shadow-xl flex flex-col max-h-[85dvh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-2 shrink-0">
               <p className="font-bold text-gray-900">{modal.mode === "add" ? "Schedule Meetup" : "Edit Meetup"}</p>
               <button onClick={() => setModal(null)} className="text-gray-400 hover:text-gray-600">
                 <FiX size={20} />
               </button>
             </div>
 
-            {/* Person picker */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-700">Person *</label>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setForm((f) => ({ ...f, personId: "", personName: "" })); }}
-                placeholder="Search contacts…"
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white"
-              />
-              {search && !form.personId && (
-                <div className="bg-white border border-gray-200 rounded-xl shadow-sm max-h-36 overflow-y-auto">
-                  {filteredPeople.slice(0, 6).map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => { setForm((f) => ({ ...f, personId: p.id, personName: p.name })); setSearch(p.name); }}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
-                    >
-                      {p.name}
-                    </button>
-                  ))}
-                  {filteredPeople.length === 0 && <p className="px-3 py-2 text-sm text-gray-400">No matches</p>}
-                </div>
-              )}
-              {form.personId && (
-                <p className="text-xs text-emerald-600 font-semibold">✓ {form.personName} selected</p>
-              )}
+            {/* Scrollable fields */}
+            <div className="overflow-y-auto flex-1 px-6 py-2 space-y-4">
+              {/* Person picker */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">Person *</label>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setForm((f) => ({ ...f, personId: "", personName: "" })); }}
+                  placeholder="Search contacts…"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white"
+                />
+                {search && !form.personId && (
+                  <div className="bg-white border border-gray-200 rounded-xl shadow-sm max-h-36 overflow-y-auto">
+                    {filteredPeople.slice(0, 6).map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => { setForm((f) => ({ ...f, personId: p.id, personName: p.name })); setSearch(p.name); }}
+                        className="w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                    {filteredPeople.length === 0 && <p className="px-3 py-2 text-sm text-gray-400">No matches</p>}
+                  </div>
+                )}
+                {form.personId && (
+                  <p className="text-xs text-emerald-600 font-semibold">✓ {form.personName} selected</p>
+                )}
+              </div>
+
+              {/* Date & time */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">Date & Time *</label>
+                <input
+                  type="datetime-local"
+                  value={form.date}
+                  onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                  className="w-full min-w-0 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white"
+                />
+              </div>
+
+              {/* Location */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">Location</label>
+                <input
+                  type="text"
+                  value={form.location}
+                  onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+                  placeholder="Where are you meeting?"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white"
+                />
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">Notes</label>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                  rows={2}
+                  placeholder="What to discuss, prayer points…"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white resize-none"
+                />
+              </div>
             </div>
 
-            {/* Date & time */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-700">Date & Time *</label>
-              <input
-                type="datetime-local"
-                value={form.date}
-                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                className="w-full min-w-0 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white"
-              />
-            </div>
-
-            {/* Location */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-700">Location</label>
-              <input
-                type="text"
-                value={form.location}
-                onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
-                placeholder="Where are you meeting?"
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white"
-              />
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-700">Notes</label>
-              <textarea
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                rows={2}
-                placeholder="What to discuss, prayer points…"
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white resize-none"
-              />
-            </div>
-
-            <div className="flex gap-2">
+            {/* Pinned action buttons */}
+            <div className="flex gap-2 px-6 py-4 pb-8 md:pb-4 shrink-0 border-t border-gray-100">
               {modal.mode === "edit" && (
                 <button
                   onClick={handleDelete}
