@@ -5,6 +5,7 @@ import {
   addDoc,
   getDoc,
   getDocs,
+  onSnapshot,
   updateDoc,
   deleteDoc,
   query,
@@ -152,6 +153,38 @@ export const getPeopleByAssignee = async (uid) => {
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
     .filter((p) => !p.archived);
+};
+
+// Single read returning both active and archived — avoids duplicate Firestore queries.
+export const getAllPeopleByAssignee = async (uid) => {
+  const q = query(
+    collection(db, "people"),
+    where("assignedTo", "==", uid),
+    orderBy("createdAt", "desc")
+  );
+  const snap = await getDocs(q);
+  const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return {
+    people: docs.filter((p) => !p.archived),
+    archived: docs.filter((p) => p.archived === true),
+  };
+};
+
+// Live version of getAllPeopleByAssignee — first snapshot arrives instantly from
+// the local cache, then updates when the server responds. Returns unsubscribe fn.
+export const subscribeAllPeopleByAssignee = (uid, callback) => {
+  const q = query(
+    collection(db, "people"),
+    where("assignedTo", "==", uid),
+    orderBy("createdAt", "desc")
+  );
+  return onSnapshot(q, (snap) => {
+    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    callback({
+      people: docs.filter((p) => !p.archived),
+      archived: docs.filter((p) => p.archived === true),
+    });
+  });
 };
 
 export const getArchivedByAssignee = async (uid) => {

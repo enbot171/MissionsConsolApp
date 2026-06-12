@@ -1,6 +1,11 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
 
 // Replace these values with your Firebase project config
 export const firebaseConfig = {
@@ -16,4 +21,16 @@ export const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Persistent IndexedDB cache so pages render instantly from local data.
+// initializeFirestore throws if Firestore was already initialized (e.g. hot reload),
+// so fall back to the existing instance.
+let firestoreDb;
+try {
+  firestoreDb = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  });
+} catch {
+  firestoreDb = getFirestore(app);
+}
+export const db = firestoreDb;

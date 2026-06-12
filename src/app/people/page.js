@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getPeopleByAssignee, getArchivedByAssignee, updatePerson } from "@/lib/firestore";
+import { subscribeAllPeopleByAssignee, updatePerson } from "@/lib/firestore";
 import PageShell from "@/components/PageShell";
 import PersonCard from "@/components/PersonCard";
 import SearchBar from "@/components/SearchBar";
@@ -64,9 +64,12 @@ export default function People() {
   useEffect(() => {
     if (!user) return;
     setFetching(true);
-    Promise.all([getPeopleByAssignee(user.uid), getArchivedByAssignee(user.uid)])
-      .then(([active, arch]) => { setPeople(active); setArchived(arch); })
-      .finally(() => setFetching(false));
+    const unsubscribe = subscribeAllPeopleByAssignee(user.uid, ({ people: active, archived: arch }) => {
+      setPeople(active);
+      setArchived(arch);
+      setFetching(false);
+    });
+    return unsubscribe;
   }, [user]);
 
   if (loading) return null;
@@ -85,9 +88,6 @@ export default function People() {
     if (selectedIds.size === 0) return;
     setArchiving(true);
     await Promise.all([...selectedIds].map((id) => updatePerson(id, { archived: true })));
-    const [active, arch] = await Promise.all([getPeopleByAssignee(user.uid), getArchivedByAssignee(user.uid)]);
-    setPeople(active);
-    setArchived(arch);
     setSelectedIds(new Set());
     setSelectMode(false);
     setArchiving(false);
@@ -117,7 +117,10 @@ export default function People() {
     if (filters.prayed === "no" && p.prayed) return false;
     if (filters.saved === "yes" && !p.saved) return false;
     if (filters.saved === "no" && p.saved) return false;
-    if (search && !p.name?.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!p.name?.toLowerCase().includes(q) && !p.contact?.toLowerCase().includes(q)) return false;
+    }
     return true;
   });
 
