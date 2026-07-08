@@ -9,7 +9,8 @@ import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import Spinner from "@/components/Spinner";
 import { useSidebar } from "@/context/SidebarContext";
-import { FiClipboard, FiCalendar, FiBell, FiCheck } from "react-icons/fi";
+import { FiClipboard, FiCalendar, FiBell, FiCheck, FiExternalLink } from "react-icons/fi";
+import { contactLink } from "@/lib/contactLink";
 import { DEFAULT_FOLLOW_UP_DAYS, DEFAULT_INACTIVITY_DAYS } from "@/config/app";
 
 function getRefDate(p) {
@@ -285,13 +286,28 @@ export default function Dashboard() {
                     const interval = p.followUpDays ?? followUpDays;
                     const days = ref ? daysSince(ref) - interval : 0;
                     const isTexting = texting.has(p.id);
+                    const link = contactLink(p.contactType, p.contact);
                     return (
                       <div key={p.id} className="bg-white rounded-xl border border-rose-100 shadow-sm px-4 py-3 flex items-center gap-3">
                         <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/person/${p.id}`)}>
                           <p className="text-sm font-semibold text-gray-900 truncate">{p.name}</p>
                           {(p.contactType || p.contact) && (
-                            <p className="text-xs text-gray-600 truncate">
-                              {p.contactType ? `${p.contactType} - ${p.contact}` : p.contact}
+                            <p className="text-xs text-gray-600 truncate flex items-center gap-1.5">
+                              <span className="truncate">
+                                {p.contactType ? `${p.contactType} - ${p.contact}` : p.contact}
+                              </span>
+                              {link && (
+                                <a
+                                  href={link.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title={`Open ${link.label}`}
+                                  className="shrink-0 inline-flex items-center justify-center w-4 h-4 rounded text-blue-600 hover:bg-blue-50"
+                                >
+                                  <FiExternalLink size={11} />
+                                </a>
+                              )}
                             </p>
                           )}
                           <p className="text-xs text-rose-500 font-semibold">

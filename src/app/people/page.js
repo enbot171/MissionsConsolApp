@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { subscribeAllPeopleByAssignee, updatePerson } from "@/lib/firestore";
@@ -8,7 +8,8 @@ import PageShell from "@/components/PageShell";
 import PersonCard from "@/components/PersonCard";
 import SearchBar from "@/components/SearchBar";
 import { CONTACT_ROLES, CONTACT_TYPES, SOURCES } from "@/config/app";
-import { FiSliders, FiGrid, FiCheckSquare } from "react-icons/fi";
+import { FiSliders, FiGrid, FiCheckSquare, FiList, FiExternalLink } from "react-icons/fi";
+import { contactLink } from "@/lib/contactLink";
 
 const ROLE_COLORS = {
   Contact: "bg-blue-500",
@@ -26,21 +27,114 @@ const BOOL_OPTIONS = [
 ];
 
 const EXCLUSIVE_ROLES = ["Contact", "Disciple"];
-const EMPTY_FILTERS = { contactType: "", source: "", gospelShared: "", prayed: "", saved: "" };
+const EMPTY_FILTERS = { contactType: "", source: "", metAt: "", gospelShared: "", prayed: "", saved: "" };
+const VIEW_MODE_KEY = "consolapp:peopleViewMode";
+
+function MetAtCombo({ value, onChange, options }) {
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const q = value.trim().toLowerCase();
+  const matches = q
+    ? options.filter((o) => o.toLowerCase().includes(q))
+    : options;
+
+  const pick = (v) => {
+    onChange(v);
+    setOpen(false);
+    setHighlight(-1);
+  };
+
+  const onKeyDown = (e) => {
+    if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      setOpen(true);
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlight((h) => Math.min(h + 1, matches.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter" && highlight >= 0) {
+      e.preventDefault();
+      pick(matches[highlight]);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2" ref={boxRef}>
+      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Met At</label>
+      <div className="relative">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => { onChange(e.target.value); setOpen(true); setHighlight(-1); }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+          placeholder="Search location…"
+          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 pr-8 text-sm text-gray-900 outline-none focus:border-blue-500"
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={() => { onChange(""); setOpen(false); }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+          >
+            ×
+          </button>
+        )}
+        {open && matches.length > 0 && (
+          <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-56 overflow-y-auto">
+            {matches.map((m, i) => (
+              <button
+                key={m}
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); pick(m); }}
+                onMouseEnter={() => setHighlight(i)}
+                className={`w-full text-left px-3 py-2 text-sm ${
+                  i === highlight ? "bg-blue-50 text-blue-700" : "text-gray-800 hover:bg-gray-50"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function FilterSelect({ label, value, onChange, options }) {
   return (
     <div className="flex flex-col gap-2">
       <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 appearance-none"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 pr-9 text-sm text-gray-900 outline-none focus:border-blue-500 appearance-none"
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" width="12" height="12" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path d="M5 8l5 5 5-5H5z" />
+        </svg>
+      </div>
     </div>
   );
 }
@@ -58,6 +152,19 @@ export default function People() {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [selectMode, setSelectMode] = useState(false);
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window === "undefined") return "cards";
+    const saved = window.localStorage.getItem(VIEW_MODE_KEY);
+    return saved === "table" ? "table" : "cards";
+  });
+
+  const toggleViewMode = () => {
+    setViewMode((prev) => {
+      const next = prev === "cards" ? "table" : "cards";
+      if (typeof window !== "undefined") window.localStorage.setItem(VIEW_MODE_KEY, next);
+      return next;
+    });
+  };
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [archiving, setArchiving] = useState(false);
 
@@ -107,10 +214,15 @@ export default function People() {
 
   const pool = showArchived ? archived : people;
 
+  const uniqueMetAt = Array.from(
+    new Set(pool.map((p) => (p.metAt || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
   const filtered = pool.filter((p) => {
     if (activeRoles.length > 0 && !activeRoles.some((r) => (p.roles || []).includes(r))) return false;
     if (filters.contactType && p.contactType !== filters.contactType) return false;
     if (filters.source && p.source !== filters.source) return false;
+    if (filters.metAt && !p.metAt?.toLowerCase().includes(filters.metAt.toLowerCase())) return false;
     if (filters.gospelShared === "yes" && !p.gospelShared) return false;
     if (filters.gospelShared === "no" && p.gospelShared) return false;
     if (filters.prayed === "yes" && !p.prayed) return false;
@@ -119,7 +231,17 @@ export default function People() {
     if (filters.saved === "no" && p.saved) return false;
     if (search) {
       const q = search.toLowerCase();
-      if (!p.name?.toLowerCase().includes(q) && !p.contact?.toLowerCase().includes(q)) return false;
+      const fields = [
+        p.name,
+        p.contact,
+        p.contactType,
+        p.source,
+        p.metAt,
+        p.description,
+        p.progressRemarks,
+        (p.roles || []).join(" "),
+      ];
+      if (!fields.some((f) => f && String(f).toLowerCase().includes(q))) return false;
     }
     return true;
   });
@@ -151,8 +273,15 @@ export default function People() {
       {/* Search + filter toggle */}
       <div className="flex gap-2 mb-3 items-start">
         <div className="flex-1">
-          <SearchBar value={search} onChange={setSearch} />
+          <SearchBar value={search} onChange={setSearch} placeholder="Search name, contact, notes, met at…" />
         </div>
+        <button
+          onClick={toggleViewMode}
+          title={viewMode === "cards" ? "Switch to table view" : "Switch to card view"}
+          className="shrink-0 w-11 h-11 rounded-xl border bg-white border-gray-200 text-gray-600 flex items-center justify-center mb-4"
+        >
+          {viewMode === "cards" ? <FiList size={17} /> : <FiGrid size={17} />}
+        </button>
         <button
           onClick={() => setShowFilters((v) => !v)}
           className={`relative shrink-0 w-11 h-11 rounded-xl border flex items-center justify-center transition-colors mb-4 ${
@@ -188,6 +317,8 @@ export default function People() {
               options={[{ value: "", label: "All" }, ...SOURCES.map((s) => ({ value: s, label: s }))]}
             />
           </div>
+
+          <MetAtCombo value={filters.metAt} onChange={(v) => setFilter("metAt", v)} options={uniqueMetAt} />
 
           <div className="border-t border-gray-100" />
 
@@ -253,6 +384,14 @@ export default function People() {
         <p className="text-center text-gray-600 text-sm py-12">
           No people found{hasAnyFilter ? " matching your filters" : ""}.
         </p>
+      ) : viewMode === "table" ? (
+        <PeopleTable
+          people={filtered}
+          onRowClick={(p) => router.push(`/person/${p.id}`)}
+          selectMode={selectMode}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+        />
       ) : (
         <div className="space-y-2.5">
           {filtered.map((p) => (
@@ -279,5 +418,85 @@ export default function People() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+function PeopleTable({ people, onRowClick, selectMode, selectedIds, onToggleSelect }) {
+  if (people.length === 0) return null;
+  return (
+    <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <tr>
+            {selectMode && <th className="px-3 py-2 w-8"></th>}
+            <th className="px-3 py-2 text-left font-semibold">Name</th>
+            <th className="px-3 py-2 text-left font-semibold">Contact</th>
+            <th className="px-3 py-2 text-left font-semibold">Type</th>
+            <th className="px-3 py-2 text-left font-semibold">Source</th>
+            <th className="px-3 py-2 text-left font-semibold">Met At</th>
+            <th className="px-3 py-2 text-left font-semibold">Roles</th>
+            <th className="px-3 py-2 text-left font-semibold">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {people.map((p) => {
+            const link = contactLink(p.contactType, p.contact);
+            return (
+              <tr
+                key={p.id}
+                onClick={() => (selectMode ? onToggleSelect(p.id) : onRowClick(p))}
+                className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
+              >
+                {selectMode && (
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(p.id)}
+                      onChange={() => onToggleSelect(p.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </td>
+                )}
+                <td className="px-3 py-2 font-semibold text-gray-900 whitespace-nowrap">{p.name}</td>
+                <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5">
+                    {p.contact}
+                    {link && (
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        title={`Open ${link.label}`}
+                        className="text-blue-600 hover:bg-blue-50 rounded p-0.5"
+                      >
+                        <FiExternalLink size={12} />
+                      </a>
+                    )}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{p.contactType || "—"}</td>
+                <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{p.source || "—"}</td>
+                <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{p.metAt || "—"}</td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  <div className="flex gap-1 flex-wrap">
+                    {(p.roles || []).map((r) => (
+                      <span key={r} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-semibold">
+                        {r}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
+                  {p.gospelShared && <span className="mr-1">G</span>}
+                  {p.prayed && <span className="mr-1">P</span>}
+                  {p.saved && <span className="mr-1">S</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }

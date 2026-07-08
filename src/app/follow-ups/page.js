@@ -6,8 +6,9 @@ import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPeopleByAssignee, updatePerson } from "@/lib/firestore";
 import { serverTimestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
-import { FiArchive, FiCheck } from "react-icons/fi";
+import { FiArchive, FiCheck, FiExternalLink } from "react-icons/fi";
 import { DEFAULT_FOLLOW_UP_DAYS, DEFAULT_INACTIVITY_DAYS, ROLE_STYLES } from "@/config/app";
+import { contactLink } from "@/lib/contactLink";
 
 function daysSince(date) {
   return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
@@ -230,13 +231,28 @@ function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, 
   const isChecking = acting === "checking";
   const isArchiving = acting === "archiving";
   const busy = !!acting;
+  const link = contactLink(person.contactType, person.contact);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
       <div className="flex-1 min-w-0 cursor-pointer" onClick={onNavigate}>
         <p className="font-semibold text-gray-900 truncate">{person.name}</p>
-        <p className="text-sm text-gray-700 truncate">
-          {person.contactType ? `${person.contactType} - ${person.contact}` : person.contact}
+        <p className="text-sm text-gray-700 truncate flex items-center gap-1.5">
+          <span className="truncate">
+            {person.contactType ? `${person.contactType} - ${person.contact}` : person.contact}
+          </span>
+          {link && (
+            <a
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title={`Open ${link.label}`}
+              className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-blue-600 hover:bg-blue-50"
+            >
+              <FiExternalLink size={12} />
+            </a>
+          )}
         </p>
         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
           {(person.roles || []).map((r) => (

@@ -460,14 +460,26 @@ function Field({ label, value, onChange, type = "text", select, placeholder, tex
       {textarea ? (
         <textarea value={value ?? ""} onChange={(e) => onChange(e.target.value)} rows={3} placeholder={placeholder} className={`${inputCls} resize-none`} />
       ) : select ? (
-        <select value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={inputCls}>
-          {placeholder && <option value="">{placeholder}</option>}
-          {select.map((o) =>
-            typeof o === "string"
-              ? <option key={o} value={o}>{o}</option>
-              : <option key={o.value} value={o.value}>{o.label}</option>
-          )}
-        </select>
+        <div className="relative">
+          <select
+            value={value ?? ""}
+            onChange={(e) => onChange(e.target.value)}
+            className={`${inputCls} appearance-none pr-9`}
+          >
+            {placeholder && <option value="">{placeholder}</option>}
+            {select.map((o) =>
+              typeof o === "string"
+                ? <option key={o} value={o}>{o}</option>
+                : <option key={o.value} value={o.value}>{o.label}</option>
+            )}
+          </select>
+          <svg
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+            width="12" height="12" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"
+          >
+            <path d="M5 8l5 5 5-5H5z" />
+          </svg>
+        </div>
       ) : (
         <input type={type} value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={inputCls} />
       )}

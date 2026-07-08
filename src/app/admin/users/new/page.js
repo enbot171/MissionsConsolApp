@@ -89,10 +89,15 @@ export default function AdminAddUser() {
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-gray-700">Team</label>
-            <select value={form.teamId} onChange={(e) => set("teamId", e.target.value)} className={inputCls}>
-              <option value="">No team</option>
-              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            <div className="relative">
+              <select value={form.teamId} onChange={(e) => set("teamId", e.target.value)} className={`${inputCls} appearance-none pr-9`}>
+                <option value="">No team</option>
+                {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" width="12" height="12" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path d="M5 8l5 5 5-5H5z" />
+              </svg>
+            </div>
           </div>
         </div>
 
