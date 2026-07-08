@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { subscribeAllPeopleByAssignee, updatePerson } from "@/lib/firestore";
@@ -179,8 +179,6 @@ export default function People() {
     return unsubscribe;
   }, [user]);
 
-  if (loading) return null;
-
   const setFilter = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
 
   const toggleSelect = (person) => {
@@ -212,14 +210,20 @@ export default function People() {
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
   const hasAnyFilter = activeFilterCount > 0 || activeRoles.length > 0 || showArchived;
 
-  const pool = showArchived ? archived : people;
+  const pool = useMemo(
+    () => (loading ? [] : (showArchived ? archived : people)),
+    [loading, showArchived, archived, people]
+  );
 
-  const uniqueMetAt = Array.from(
-    new Set(pool.map((p) => (p.metAt || "").trim()).filter(Boolean))
-  ).sort((a, b) => a.localeCompare(b));
+  const uniqueMetAt = useMemo(
+    () => Array.from(
+      new Set(pool.map((p) => (p.metAt || "").trim()).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b)),
+    [pool]
+  );
 
   const q = search.trim().toLowerCase();
-  const filtered = pool.reduce((acc, p) => {
+  const filtered = useMemo(() => pool.reduce((acc, p) => {
     if (activeRoles.length > 0 && !activeRoles.some((r) => (p.roles || []).includes(r))) return acc;
     if (filters.contactType && p.contactType !== filters.contactType) return acc;
     if (filters.source && p.source !== filters.source) return acc;
@@ -246,11 +250,14 @@ export default function People() {
       if (!hit) return acc;
       matchedField = hit[0];
     }
-    acc.push(matchedField && matchedField !== "name" && matchedField !== "contact"
-      ? { ...p, _matchedField: matchedField }
-      : p);
+    const show = matchedField && matchedField !== "name" && matchedField !== "contact"
+      ? matchedField
+      : null;
+    acc.push({ ...p, _matchedField: show });
     return acc;
-  }, []);
+  }, []), [pool, activeRoles, filters, q]);
+
+  if (loading) return null;
 
   return (
     <PageShell
@@ -450,7 +457,7 @@ function PeopleTable({ people, onRowClick, selectMode, selectedIds, onToggleSele
             return (
               <tr
                 key={p.id}
-                onClick={() => (selectMode ? onToggleSelect(p.id) : onRowClick(p))}
+                onClick={() => (selectMode ? onToggleSelect(p) : onRowClick(p))}
                 className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
               >
                 {selectMode && (
@@ -458,7 +465,7 @@ function PeopleTable({ people, onRowClick, selectMode, selectedIds, onToggleSele
                     <input
                       type="checkbox"
                       checked={selectedIds.has(p.id)}
-                      onChange={() => onToggleSelect(p.id)}
+                      onChange={() => onToggleSelect(p)}
                       onClick={(e) => e.stopPropagation()}
                     />
                   </td>
