@@ -218,33 +218,39 @@ export default function People() {
     new Set(pool.map((p) => (p.metAt || "").trim()).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
-  const filtered = pool.filter((p) => {
-    if (activeRoles.length > 0 && !activeRoles.some((r) => (p.roles || []).includes(r))) return false;
-    if (filters.contactType && p.contactType !== filters.contactType) return false;
-    if (filters.source && p.source !== filters.source) return false;
-    if (filters.metAt && !p.metAt?.toLowerCase().includes(filters.metAt.toLowerCase())) return false;
-    if (filters.gospelShared === "yes" && !p.gospelShared) return false;
-    if (filters.gospelShared === "no" && p.gospelShared) return false;
-    if (filters.prayed === "yes" && !p.prayed) return false;
-    if (filters.prayed === "no" && p.prayed) return false;
-    if (filters.saved === "yes" && !p.saved) return false;
-    if (filters.saved === "no" && p.saved) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      const fields = [
-        p.name,
-        p.contact,
-        p.contactType,
-        p.source,
-        p.metAt,
-        p.description,
-        p.progressRemarks,
-        (p.roles || []).join(" "),
+  const q = search.trim().toLowerCase();
+  const filtered = pool.reduce((acc, p) => {
+    if (activeRoles.length > 0 && !activeRoles.some((r) => (p.roles || []).includes(r))) return acc;
+    if (filters.contactType && p.contactType !== filters.contactType) return acc;
+    if (filters.source && p.source !== filters.source) return acc;
+    if (filters.metAt && !p.metAt?.toLowerCase().includes(filters.metAt.toLowerCase())) return acc;
+    if (filters.gospelShared === "yes" && !p.gospelShared) return acc;
+    if (filters.gospelShared === "no" && p.gospelShared) return acc;
+    if (filters.prayed === "yes" && !p.prayed) return acc;
+    if (filters.prayed === "no" && p.prayed) return acc;
+    if (filters.saved === "yes" && !p.saved) return acc;
+    if (filters.saved === "no" && p.saved) return acc;
+    let matchedField = null;
+    if (q) {
+      const searchFields = [
+        ["name", p.name],
+        ["contact", p.contact],
+        ["type", p.contactType],
+        ["source", p.source],
+        ["met at", p.metAt],
+        ["notes", p.description],
+        ["progress", p.progressRemarks],
+        ["role", (p.roles || []).join(" ")],
       ];
-      if (!fields.some((f) => f && String(f).toLowerCase().includes(q))) return false;
+      const hit = searchFields.find(([, v]) => v && String(v).toLowerCase().includes(q));
+      if (!hit) return acc;
+      matchedField = hit[0];
     }
-    return true;
-  });
+    acc.push(matchedField && matchedField !== "name" && matchedField !== "contact"
+      ? { ...p, _matchedField: matchedField }
+      : p);
+    return acc;
+  }, []);
 
   return (
     <PageShell
@@ -457,7 +463,14 @@ function PeopleTable({ people, onRowClick, selectMode, selectedIds, onToggleSele
                     />
                   </td>
                 )}
-                <td className="px-3 py-2 font-semibold text-gray-900 whitespace-nowrap">{p.name}</td>
+                <td className="px-3 py-2 font-semibold text-gray-900 whitespace-nowrap">
+                  {p.name}
+                  {p._matchedField && (
+                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">
+                      matched: {p._matchedField}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
                   <span className="inline-flex items-center gap-1.5">
                     {p.contact}

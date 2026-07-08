@@ -32,13 +32,18 @@ export default function PersonCard({ person, onRemove, onSelect, selected, onSch
           {person.contactType && <span className="text-gray-700">{person.contactType} · </span>}
           {person.contact}
         </p>
-        {(person.roles || []).length > 0 && (
-          <div className="flex gap-1 mt-1.5 flex-wrap">
+        {((person.roles || []).length > 0 || person._matchedField) && (
+          <div className="flex gap-1 mt-1.5 flex-wrap items-center">
             {(person.roles || []).map((r) => (
               <span key={r} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${ROLE_STYLES[r] || "bg-gray-100 text-gray-700"}`}>
                 {r}
               </span>
             ))}
+            {person._matchedField && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">
+                matched: {person._matchedField}
+              </span>
+            )}
           </div>
         )}
       </div>
