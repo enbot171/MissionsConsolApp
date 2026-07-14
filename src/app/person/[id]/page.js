@@ -77,6 +77,7 @@ export default function PersonView() {
         saved: form.saved ?? false,
         milestones: form.milestones || {},
         progressRemarks: form.progressRemarks || "",
+        followUpRemarks: form.followUpRemarks || "",
         ...(form.followUpDays != null ? { followUpDays: parseInt(form.followUpDays) || null } : {}),
         scheduledFollowUpAt: form.scheduledFollowUpAt instanceof Date
           ? Timestamp.fromDate(form.scheduledFollowUpAt)
@@ -202,6 +203,7 @@ export default function PersonView() {
             />
             <Field label="Met At" value={form.metAt || ""} onChange={(v) => set("metAt", v)} />
             <Field label="Remarks" value={form.description || ""} onChange={(v) => set("description", v)} textarea />
+            <Field label="Follow Up Remarks" value={form.followUpRemarks || ""} onChange={(v) => set("followUpRemarks", v)} textarea />
             <Field
               label="Subsequent follow-up interval (days)"
               type="number"

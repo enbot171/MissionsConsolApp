@@ -41,7 +41,7 @@ function AddContactInner() {
   const [form, setForm] = useState({
     name: "", contactType: "", contact: "", source: "",
     age: "", address: "", gospelShared: false, prayed: false, saved: false,
-    cgId: prefilledCgId, metAt: "", description: "", progressRemarks: "",
+    cgId: prefilledCgId, metAt: "", description: "", progressRemarks: "", followUpRemarks: "",
     roles: prefilledMinistry ? ["Core Team"] : ["Contact"],
     ministries: prefilledMinistry ? [prefilledMinistry] : [],
     milestones: {},
@@ -141,7 +141,10 @@ function AddContactInner() {
               <Field label="Contact Info *" value={form.contact} onChange={(v) => set("contact", v)} placeholder="Handle / number" />
               <Field label="Date Met" type="date" value={form.metOn} onChange={(v) => set("metOn", v)} />
               <Field label="Met At" value={form.metAt} onChange={(v) => set("metAt", v)} placeholder="Where you met" />
-              <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
+              <div className="space-y-1">
+                <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
+                <Field label="Follow Up Remarks" value={form.followUpRemarks} onChange={(v) => set("followUpRemarks", v)} textarea placeholder="What to follow up on…" />
+              </div>
             </Card>
 
             <Card title="Status">
@@ -170,7 +173,10 @@ function AddContactInner() {
               <Field label="Met At" value={form.metAt} onChange={(v) => set("metAt", v)} placeholder="Where you met" />
               <Field label="CG" value={form.cgId} onChange={(v) => set("cgId", v)}
                 select={cgs.map((c) => ({ value: c.id, label: c.name }))} placeholder="No CG" />
-              <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
+              <div className="space-y-1">
+                <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
+                <Field label="Follow Up Remarks" value={form.followUpRemarks} onChange={(v) => set("followUpRemarks", v)} textarea placeholder="What to follow up on…" />
+              </div>
             </Card>
 
             <Card title="Status">
@@ -245,7 +251,10 @@ function AddContactInner() {
               <p className="text-xs text-gray-500">For people you spoke to but didn't get contact info from.</p>
               <Field label="Name *" value={form.name} onChange={(v) => set("name", v)} placeholder="Full name" />
               <Field label="Date Met" type="date" value={form.metOn} onChange={(v) => set("metOn", v)} />
-              <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
+              <div className="space-y-1">
+                <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
+                <Field label="Follow Up Remarks" value={form.followUpRemarks} onChange={(v) => set("followUpRemarks", v)} textarea placeholder="What to follow up on…" />
+              </div>
             </Card>
 
             <Card title="Status">

@@ -6,9 +6,8 @@ import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPeopleByAssignee, updatePerson } from "@/lib/firestore";
 import { serverTimestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
-import { FiArchive, FiCheck, FiExternalLink } from "react-icons/fi";
-import { DEFAULT_FOLLOW_UP_DAYS, DEFAULT_INACTIVITY_DAYS, ROLE_STYLES } from "@/config/app";
-import { contactLink } from "@/lib/contactLink";
+import FollowUpCard from "@/components/FollowUpCard";
+import { DEFAULT_FOLLOW_UP_DAYS, DEFAULT_INACTIVITY_DAYS } from "@/config/app";
 
 function daysSince(date) {
   return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
@@ -141,9 +140,10 @@ export default function FollowUps() {
           {scheduled.length > 0 && (
             <Section label="Scheduled" count={scheduled.length} accent="text-blue-600">
               {scheduled.map((p) => (
-                <PersonRow
+                <FollowUpCard
                   key={p.id}
                   person={p}
+                  showRoles
                   badge={`Scheduled · ${p._scheduled.toLocaleDateString([], { month: "short", day: "numeric" })}`}
                   badgeColor="text-blue-500"
                   onNavigate={() => router.push(`/person/${p.id}`)}
@@ -158,9 +158,10 @@ export default function FollowUps() {
           {newContact.length > 0 && (
             <Section label="New contacts" count={newContact.length} accent="text-rose-500">
               {newContact.map((p) => (
-                <PersonRow
+                <FollowUpCard
                   key={p.id}
                   person={p}
+                  showRoles
                   badge={p._daysOverdue === 0 ? "First follow-up due" : `First follow-up · ${p._daysOverdue}d overdue`}
                   badgeColor="text-rose-500"
                   onNavigate={() => router.push(`/person/${p.id}`)}
@@ -175,9 +176,10 @@ export default function FollowUps() {
           {followUpDue.length > 0 && (
             <Section label="Follow up" count={followUpDue.length} accent="text-indigo-500">
               {followUpDue.map((p) => (
-                <PersonRow
+                <FollowUpCard
                   key={p.id}
                   person={p}
+                  showRoles
                   badge={p._daysOverdue === 0 ? "Due today" : `${p._daysOverdue}d overdue`}
                   badgeColor="text-indigo-500"
                   onNavigate={() => router.push(`/person/${p.id}`)}
@@ -195,9 +197,10 @@ export default function FollowUps() {
                 No scheduled meeting or interval set — haven't been met in {inactivityDays}+ days.
               </p>
               {inactive.map((p) => (
-                <PersonRow
+                <FollowUpCard
                   key={p.id}
                   person={p}
+                  showRoles
                   badge={`${p._since}d without contact`}
                   badgeColor="text-orange-500"
                   onNavigate={() => router.push(`/person/${p.id}`)}
@@ -227,67 +230,3 @@ function Section({ label, count, accent, children }) {
   );
 }
 
-function PersonRow({ person, badge, badgeColor, onNavigate, onCheck, onArchive, acting, checkLabel }) {
-  const isChecking = acting === "checking";
-  const isArchiving = acting === "archiving";
-  const busy = !!acting;
-  const link = contactLink(person.contactType, person.contact);
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
-      <div className="flex-1 min-w-0 cursor-pointer" onClick={onNavigate}>
-        <p className="font-semibold text-gray-900 truncate">{person.name}</p>
-        <p className="text-sm text-gray-700 truncate flex items-center gap-1.5">
-          <span className="truncate">
-            {person.contactType ? `${person.contactType} - ${person.contact}` : person.contact}
-          </span>
-          {link && (
-            <a
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title={`Open ${link.label}`}
-              className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-blue-600 hover:bg-blue-50"
-            >
-              <FiExternalLink size={12} />
-            </a>
-          )}
-        </p>
-        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-          {(person.roles || []).map((r) => (
-            <span key={r} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${ROLE_STYLES[r] || "bg-gray-100 text-gray-700"}`}>
-              {r}
-            </span>
-          ))}
-          <span className={`text-[10px] font-semibold ${badgeColor}`}>{badge}</span>
-          {person.followUpDays && (
-            <span className="text-[10px] text-gray-500">· every {person.followUpDays}d</span>
-          )}
-        </div>
-      </div>
-
-      <button
-        onClick={() => onArchive(person)}
-        disabled={busy}
-        className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 transition-colors"
-      >
-        {isArchiving
-          ? <span className="w-3 h-3 rounded-full border border-red-400 border-t-transparent animate-spin" />
-          : <FiArchive size={12} className="text-red-500" />}
-        <span className="text-xs font-semibold text-red-500">Archive</span>
-      </button>
-
-      <button
-        onClick={() => onCheck(person)}
-        disabled={busy}
-        title={checkLabel || "Mark as followed up"}
-        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 ${
-          isChecking ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"
-        }`}
-      >
-        {isChecking && <FiCheck size={11} className="text-white" />}
-      </button>
-    </div>
-  );
-}
