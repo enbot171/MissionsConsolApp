@@ -8,8 +8,8 @@ import PageShell from "@/components/PageShell";
 import PersonCard from "@/components/PersonCard";
 import SearchBar from "@/components/SearchBar";
 import { CONTACT_ROLES, CONTACT_TYPES, SOURCES } from "@/config/app";
-import { FiSliders, FiGrid, FiCheckSquare, FiList, FiExternalLink } from "react-icons/fi";
-import { contactLink } from "@/lib/contactLink";
+import { FiSliders, FiGrid, FiCheckSquare, FiList } from "react-icons/fi";
+import ContactActions from "@/components/ContactActions";
 
 const ROLE_COLORS = {
   Contact: "bg-blue-500",
@@ -453,7 +453,6 @@ function PeopleTable({ people, onRowClick, selectMode, selectedIds, onToggleSele
         </thead>
         <tbody>
           {people.map((p) => {
-            const link = contactLink(p.contactType, p.contact);
             return (
               <tr
                 key={p.id}
@@ -481,18 +480,7 @@ function PeopleTable({ people, onRowClick, selectMode, selectedIds, onToggleSele
                 <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
                   <span className="inline-flex items-center gap-1.5">
                     {p.contact}
-                    {link && (
-                      <a
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        title={`Open ${link.label}`}
-                        className="text-blue-600 hover:bg-blue-50 rounded p-0.5"
-                      >
-                        <FiExternalLink size={12} />
-                      </a>
-                    )}
+                    <ContactActions contactType={p.contactType} contact={p.contact} size={12} />
                   </span>
                 </td>
                 <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{p.contactType || "—"}</td>

@@ -1,8 +1,8 @@
 "use client";
 
-import { FiArchive, FiCheck, FiExternalLink } from "react-icons/fi";
+import { FiArchive, FiCheck } from "react-icons/fi";
 import { ROLE_STYLES } from "@/config/app";
-import { contactLink } from "@/lib/contactLink";
+import ContactActions from "@/components/ContactActions";
 
 export default function FollowUpCard({
   person,
@@ -18,7 +18,6 @@ export default function FollowUpCard({
   const isChecking = acting === "checking";
   const isArchiving = acting === "archiving";
   const busy = !!acting;
-  const link = contactLink(person.contactType, person.contact);
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-3 py-2.5 flex items-center gap-2.5">
@@ -29,18 +28,7 @@ export default function FollowUpCard({
             <span className="truncate">
               {person.contactType ? `${person.contactType} - ${person.contact}` : person.contact}
             </span>
-            {link && (
-              <a
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                title={`Open ${link.label}`}
-                className="shrink-0 inline-flex items-center justify-center w-4 h-4 rounded text-blue-600 hover:bg-blue-50"
-              >
-                <FiExternalLink size={11} />
-              </a>
-            )}
+            <ContactActions contactType={person.contactType} contact={person.contact} size={12} />
           </p>
         )}
         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">

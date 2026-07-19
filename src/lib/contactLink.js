@@ -4,5 +4,9 @@ export function contactLink(contactType, contact) {
   if (contactType !== "InstagramID" || !contact) return null;
   const handle = contact.trim().replace(/^@/, "");
   if (!IG_HANDLE.test(handle)) return null;
-  return { url: `https://instagram.com/${handle}`, label: "Instagram" };
+  return {
+    handle,
+    url: `https://instagram.com/${handle}`,
+    label: "Instagram",
+  };
 }

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { ROLE_STYLES } from "@/config/app";
+import ContactActions from "@/components/ContactActions";
 
 export default function PersonCard({ person, onRemove, onSelect, selected, onSchedule }) {
   const router = useRouter();
@@ -28,9 +29,12 @@ export default function PersonCard({ person, onRemove, onSelect, selected, onSch
       {/* Info */}
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-gray-900 truncate">{person.name}</p>
-        <p className="text-sm text-gray-600 truncate">
-          {person.contactType && <span className="text-gray-700">{person.contactType} · </span>}
-          {person.contact}
+        <p className="text-sm text-gray-600 truncate flex items-center gap-1.5">
+          <span className="truncate">
+            {person.contactType && <span className="text-gray-700">{person.contactType} · </span>}
+            {person.contact}
+          </span>
+          <ContactActions contactType={person.contactType} contact={person.contact} size={13} />
         </p>
         {((person.roles || []).length > 0 || person._matchedField) && (
           <div className="flex gap-1 mt-1.5 flex-wrap items-center">

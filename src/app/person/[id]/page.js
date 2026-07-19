@@ -8,6 +8,8 @@ import { Timestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
 import { FaArchive } from "react-icons/fa";
 import { FiCalendar } from "react-icons/fi";
+import { FaInstagram } from "react-icons/fa";
+import { contactLink } from "@/lib/contactLink";
 import { CONTACT_TYPES, SOURCES, CONTACT_ROLES, MILESTONES, ROLE_STYLES } from "@/config/app";
 
 export default function PersonView() {
@@ -162,6 +164,22 @@ export default function PersonView() {
         <p className="text-gray-600 text-sm mt-1">
           {person.contactType ? `${person.contactType} - ${person.contact}` : person.contact}
         </p>
+        {(() => {
+          const ig = contactLink(person.contactType, person.contact);
+          if (!ig) return null;
+          return (
+            <div className="flex gap-2 mt-2.5">
+              <a
+                href={ig.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-pink-200 bg-pink-50 text-pink-700 text-xs font-semibold hover:bg-pink-100 transition-colors"
+              >
+                <FaInstagram size={13} /> Profile
+              </a>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Tabs */}
