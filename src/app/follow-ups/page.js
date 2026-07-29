@@ -1,80 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPeopleByAssignee, updatePerson } from "@/lib/firestore";
-import { serverTimestamp } from "firebase/firestore";
+import { useFollowUpLog } from "@/hooks/useFollowUpLog";
+import { classifyPeople } from "@/lib/followUps";
 import PageShell from "@/components/PageShell";
 import FollowUpCard from "@/components/FollowUpCard";
 import { DEFAULT_FOLLOW_UP_DAYS, DEFAULT_INACTIVITY_DAYS } from "@/config/app";
-
-function daysSince(date) {
-  return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function classifyPeople(people, firstFollowUpDays, inactivityDays) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const scheduled = [], newContact = [], followUpDue = [], inactive = [];
-
-  people.forEach((p) => {
-    const lastFollowedUp = p.lastFollowedUpAt?.toDate ? p.lastFollowedUpAt.toDate() : null;
-    const created = p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : null);
-    const scheduledDate = p.scheduledFollowUpAt?.toDate
-      ? p.scheduledFollowUpAt.toDate()
-      : (p.scheduledFollowUpAt ? new Date(p.scheduledFollowUpAt) : null);
-    const interval = p.followUpDays ?? null;
-
-    // Scheduled date takes full control — only show when past due
-    if (scheduledDate) {
-      const dueIn = Math.ceil((scheduledDate - today) / (1000 * 60 * 60 * 24));
-      if (dueIn <= 0) scheduled.push({ ...p, _scheduled: scheduledDate });
-      return;
-    }
-
-    // Interval-based (uses lastFollowedUpAt if exists, else createdAt)
-    if (interval) {
-      const ref = lastFollowedUp || created;
-      const since = ref ? daysSince(ref) : null;
-      if (since !== null && since >= interval) followUpDue.push({ ...p, _daysOverdue: since - interval });
-      return;
-    }
-
-    // No schedule, no interval
-    if (!lastFollowedUp) {
-      // New contact — use global first follow-up threshold
-      const since = created ? daysSince(created) : null;
-      if (since !== null && since >= firstFollowUpDays) newContact.push({ ...p, _daysOverdue: since - firstFollowUpDays });
-      return;
-    }
-
-    // Has been followed up, chose no interval/schedule → inactivity
-    const since = daysSince(lastFollowedUp);
-    if (since >= inactivityDays) inactive.push({ ...p, _since: since });
-  });
-
-  scheduled.sort((a, b) => a._scheduled - b._scheduled);
-  newContact.sort((a, b) => b._daysOverdue - a._daysOverdue);
-  followUpDue.sort((a, b) => b._daysOverdue - a._daysOverdue);
-  inactive.sort((a, b) => b._since - a._since);
-
-  return { scheduled, newContact, followUpDue, inactive };
-}
 
 export default function FollowUps() {
   const { user, profile, loading } = useRequireAuth();
   const router = useRouter();
   const [people, setPeople] = useState([]);
   const [fetching, setFetching] = useState(true);
-  const [acting, setActing] = useState({});
   const [toast, setToast] = useState(null);
 
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
   };
+
+  const patchPerson = useCallback((id, patch) => {
+    setPeople((prev) => prev.map((p) => p.id === id ? { ...p, ...patch } : p));
+  }, []);
+
+  const { setAct, clearAct, saveLog, cardProps } = useFollowUpLog(patchPerson);
 
   useEffect(() => {
     if (!user) return;
@@ -92,21 +44,9 @@ export default function FollowUps() {
   const { scheduled, newContact, followUpDue, inactive } = classifyPeople(people, followUpDays, inactivityDays);
   const totalDue = scheduled.length + newContact.length + followUpDue.length + inactive.length;
 
-  const setAct = (id, val) => setActing((prev) => ({ ...prev, [id]: val }));
-  const clearAct = (id) => setActing((prev) => { const n = { ...prev }; delete n[id]; return n; });
-
-  const handleCheck = async (person) => {
-    setAct(person.id, "checking");
-    await updatePerson(person.id, {
-      lastFollowedUpAt: serverTimestamp(),
-      ...(person.scheduledFollowUpAt ? { scheduledFollowUpAt: null } : {}),
-    });
-    setPeople((prev) => prev.map((p) =>
-      p.id === person.id
-        ? { ...p, lastFollowedUpAt: { toDate: () => new Date() }, scheduledFollowUpAt: null }
-        : p
-    ));
-    clearAct(person.id);
+  const handleSaveLog = async (person, d, alsoCheck) => {
+    await saveLog(person, d, alsoCheck);
+    showToast(alsoCheck ? `${person.name} followed up` : "Saved");
   };
 
   const handleArchive = async (person) => {
@@ -147,9 +87,9 @@ export default function FollowUps() {
                   badge={`Scheduled · ${p._scheduled.toLocaleDateString([], { month: "short", day: "numeric" })}`}
                   badgeColor="text-blue-500"
                   onNavigate={() => router.push(`/person/${p.id}`)}
-                  onCheck={handleCheck}
                   onArchive={handleArchive}
-                  acting={acting[p.id]}
+                  {...cardProps(p)}
+                  onSaveLog={handleSaveLog}
                 />
               ))}
             </Section>
@@ -165,9 +105,9 @@ export default function FollowUps() {
                   badge={p._daysOverdue === 0 ? "First follow-up due" : `First follow-up · ${p._daysOverdue}d overdue`}
                   badgeColor="text-rose-500"
                   onNavigate={() => router.push(`/person/${p.id}`)}
-                  onCheck={handleCheck}
                   onArchive={handleArchive}
-                  acting={acting[p.id]}
+                  {...cardProps(p)}
+                  onSaveLog={handleSaveLog}
                 />
               ))}
             </Section>
@@ -183,9 +123,9 @@ export default function FollowUps() {
                   badge={p._daysOverdue === 0 ? "Due today" : `${p._daysOverdue}d overdue`}
                   badgeColor="text-indigo-500"
                   onNavigate={() => router.push(`/person/${p.id}`)}
-                  onCheck={handleCheck}
                   onArchive={handleArchive}
-                  acting={acting[p.id]}
+                  {...cardProps(p)}
+                  onSaveLog={handleSaveLog}
                 />
               ))}
             </Section>
@@ -204,9 +144,9 @@ export default function FollowUps() {
                   badge={`${p._since}d without contact`}
                   badgeColor="text-orange-500"
                   onNavigate={() => router.push(`/person/${p.id}`)}
-                  onCheck={handleCheck}
                   onArchive={handleArchive}
-                  acting={acting[p.id]}
+                  {...cardProps(p)}
+                  onSaveLog={handleSaveLog}
                   checkLabel="Still active"
                 />
               ))}

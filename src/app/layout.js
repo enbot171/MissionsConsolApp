@@ -2,6 +2,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { SidebarProvider } from "@/context/SidebarContext";
+import { FollowUpCountProvider } from "@/context/FollowUpCountContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,7 +18,11 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-gray-50">
-        <AuthProvider><SidebarProvider>{children}</SidebarProvider></AuthProvider>
+        <AuthProvider>
+          <SidebarProvider>
+            <FollowUpCountProvider>{children}</FollowUpCountProvider>
+          </SidebarProvider>
+        </AuthProvider>
       </body>
     </html>
   );
