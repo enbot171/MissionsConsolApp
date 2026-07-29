@@ -415,7 +415,11 @@ export default function PersonView() {
               const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
               const isPast = d < new Date();
               return (
-                <div key={m.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-start gap-3">
+                <div
+                  key={m.id}
+                  onClick={() => router.push(`/calendar?editMeetup=${m.id}`)}
+                  className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-start gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                >
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isPast ? "bg-gray-100" : "bg-blue-50"}`}>
                     <span className={`text-sm font-bold ${isPast ? "text-gray-500" : "text-blue-600"}`}>{d.getDate()}</span>
                   </div>
@@ -427,6 +431,11 @@ export default function PersonView() {
                     </p>
                     {m.location && <p className="text-xs text-gray-500 mt-0.5">{m.location}</p>}
                     {m.notes && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{m.notes}</p>}
+                    {m.outcomeNotes && (
+                      <p className="mt-1.5 pl-2 border-l-2 border-emerald-400 text-xs text-gray-600 italic whitespace-pre-wrap">
+                        {m.outcomeNotes}
+                      </p>
+                    )}
                   </div>
                   {m.completed === true && (
                     <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full shrink-0">Done</span>

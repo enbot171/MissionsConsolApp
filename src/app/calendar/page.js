@@ -6,13 +6,21 @@ import { useRequireAuth } from "@/hooks/useRequireAuth";
 import {
   getPeopleByAssigneeForMonth,
   getMeetupsByAssignee,
+  getMeetupsForMonth,
+  getMeetup,
   getPeopleByAssignee,
   addMeetup,
   updateMeetup,
+  updatePerson,
   deleteMeetup,
 } from "@/lib/firestore";
+import { serverTimestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
-import { FiChevronLeft, FiChevronRight, FiPlus, FiX, FiTrash2 } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiPlus, FiX, FiTrash2, FiEdit3 } from "react-icons/fi";
+
+// How far back the confirmation/upcoming lists look. Bounds the read so the page
+// doesn't scan every meetup ever created.
+const CONFIRM_WINDOW_DAYS = 120;
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -36,7 +44,7 @@ function formatMeetupTime(ts) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function ScheduleForHandler({ setForm, setSearch, setModal }) {
+function QueryParamHandler({ setForm, setSearch, setModal }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   useEffect(() => {
@@ -46,6 +54,24 @@ function ScheduleForHandler({ setForm, setSearch, setModal }) {
       setForm({ personId: scheduleFor, personName: name, date: "", location: "", notes: "" });
       setSearch(name);
       setModal({ mode: "add" });
+      router.replace("/calendar");
+      return;
+    }
+    // Deep link from a person's Meetings tab — open that meetup for editing.
+    const editId = searchParams.get("editMeetup");
+    if (editId) {
+      getMeetup(editId).then((m) => {
+        if (!m) return;
+        setForm({
+          personId: m.personId || "",
+          personName: m.personName || "",
+          date: toDatetimeLocal(m.date),
+          location: m.location || "",
+          notes: m.notes || "",
+        });
+        setSearch(m.personName || "");
+        setModal({ mode: "edit", meetup: m });
+      });
       router.replace("/calendar");
     }
   }, [searchParams]);
@@ -60,27 +86,44 @@ export default function CalendarPage() {
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [peopleByDay, setPeopleByDay] = useState({});
+  const [monthMeetups, setMonthMeetups] = useState([]);
   const [meetups, setMeetups] = useState([]);
   const [myPeople, setMyPeople] = useState([]);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ personId: "", personName: "", date: "", location: "", notes: "" });
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [outcome, setOutcome] = useState(null);
+
+  const windowStart = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - CONFIRM_WINDOW_DAYS);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const reloadLists = async () => {
+    const recent = await getMeetupsByAssignee(user.uid, { since: windowStart() });
+    setMeetups(recent);
+    return recent;
+  };
 
   useEffect(() => {
     if (!user) return;
     Promise.all([
       getPeopleByAssigneeForMonth(user.uid, year, month),
-      getMeetupsByAssignee(user.uid),
+      getMeetupsForMonth(user.uid, year, month),
+      getMeetupsByAssignee(user.uid, { since: windowStart() }),
       getPeopleByAssignee(user.uid),
-    ]).then(([monthPeople, allMeetups, allPeople]) => {
+    ]).then(([monthPeople, thisMonthMeetups, recentMeetups, allPeople]) => {
       const byDay = {};
       monthPeople.forEach((p) => {
         const ds = toLocalDateStr(p.createdAt);
         if (ds) { if (!byDay[ds]) byDay[ds] = []; byDay[ds].push(p); }
       });
       setPeopleByDay(byDay);
-      setMeetups(allMeetups);
+      setMonthMeetups(thisMonthMeetups);
+      setMeetups(recentMeetups);
       setMyPeople(allPeople);
     });
   }, [user, year, month]);
@@ -94,7 +137,7 @@ export default function CalendarPage() {
   const todayStr = today.toISOString().split("T")[0];
 
   const meetupsByDay = {};
-  meetups.forEach((m) => {
+  monthMeetups.forEach((m) => {
     const ds = toLocalDateStr(m.date);
     if (ds) { if (!meetupsByDay[ds]) meetupsByDay[ds] = []; meetupsByDay[ds].push(m); }
   });
@@ -129,8 +172,10 @@ export default function CalendarPage() {
     } else {
       await updateMeetup(modal.meetup.id, form);
     }
-    const updated = await getMeetupsByAssignee(user.uid);
-    setMeetups(updated);
+    await Promise.all([
+      reloadLists(),
+      getMeetupsForMonth(user.uid, year, month).then(setMonthMeetups),
+    ]);
     setModal(null);
     setSaving(false);
   };
@@ -139,7 +184,64 @@ export default function CalendarPage() {
     setSaving(true);
     await deleteMeetup(modal.meetup.id);
     setMeetups((prev) => prev.filter((m) => m.id !== modal.meetup.id));
+    setMonthMeetups((prev) => prev.filter((m) => m.id !== modal.meetup.id));
     setModal(null);
+    setSaving(false);
+  };
+
+  // ── Meetup outcome ──────────────────────────────────────────────────────────
+  // "Did this happen?" is one action with a record attached, not a bare boolean:
+  // happened → capture what came of it and stamp the person as followed up;
+  // missed → offer a new date on the spot instead of leaving a dead end.
+
+  const openOutcome = (meetup, happened) =>
+    setOutcome({
+      meetupId: meetup.id,
+      happened,
+      outcomeNotes: meetup.outcomeNotes || "",
+      alsoFollowUp: true,
+      newDate: "",
+    });
+
+  const patchMeetup = (id, patch) => {
+    setMeetups((prev) => prev.map((m) => m.id === id ? { ...m, ...patch } : m));
+    setMonthMeetups((prev) => prev.map((m) => m.id === id ? { ...m, ...patch } : m));
+  };
+
+  const handleHappened = async (meetup) => {
+    setSaving(true);
+    await updateMeetup(meetup.id, { completed: true, outcomeNotes: outcome.outcomeNotes });
+    if (outcome.alsoFollowUp && meetup.personId) {
+      // Meeting someone IS following them up — otherwise they stay "overdue"
+      // on the follow-ups page right after you saw them.
+      await updatePerson(meetup.personId, { lastFollowedUpAt: serverTimestamp() });
+    }
+    patchMeetup(meetup.id, { completed: true, outcomeNotes: outcome.outcomeNotes });
+    setOutcome(null);
+    setSaving(false);
+  };
+
+  // A meetup that didn't happen isn't a record worth keeping — delete it.
+  // A new date is just a new meetup, with no link back to the deleted one.
+  const handleMissed = async (meetup) => {
+    setSaving(true);
+    await deleteMeetup(meetup.id);
+    if (outcome.newDate) {
+      await addMeetup({
+        personId: meetup.personId,
+        personName: meetup.personName,
+        date: outcome.newDate,
+        location: meetup.location || "",
+        notes: meetup.notes || "",
+        assignedTo: user.uid,
+        teamId: profile?.teamId || "",
+      });
+    }
+    await Promise.all([
+      reloadLists(),
+      getMeetupsForMonth(user.uid, year, month).then(setMonthMeetups),
+    ]);
+    setOutcome(null);
     setSaving(false);
   };
 
@@ -172,7 +274,7 @@ export default function CalendarPage() {
       }
     >
       <Suspense fallback={null}>
-        <ScheduleForHandler setForm={setForm} setSearch={setSearch} setModal={setModal} />
+        <QueryParamHandler setForm={setForm} setSearch={setSearch} setModal={setModal} />
       </Suspense>
 
       {/* Month navigation */}
@@ -212,7 +314,11 @@ export default function CalendarPage() {
               key={i}
               className={`bg-white min-h-[64px] p-1.5 cursor-pointer transition-colors hover:bg-blue-50 ${isToday ? "bg-blue-50" : ""}`}
               onClick={() => {
-                if (contacts.length > 0 || isPast) {
+                // A day with meetups shows them — previously a future meetup day
+                // opened the "Schedule" form, hiding what was already booked.
+                if (dayMeetups.length > 0) {
+                  setModal({ mode: "day", dateStr, meetups: dayMeetups, hasContacts: contacts.length > 0 || isPast });
+                } else if (contacts.length > 0 || isPast) {
                   router.push(`/summary?date=${dateStr}`);
                 } else {
                   openAdd(dateStr);
@@ -256,6 +362,7 @@ export default function CalendarPage() {
           <div className="space-y-2">
             {needsConfirmation.map((m) => {
                 const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
+                const open = outcome?.meetupId === m.id;
                 return (
                   <div key={m.id} className="bg-white rounded-xl border border-amber-200 shadow-sm px-4 py-3 space-y-2">
                     <div className="flex items-center gap-3">
@@ -269,28 +376,105 @@ export default function CalendarPage() {
                           {m.location ? ` · ${m.location}` : ""}
                         </p>
                       </div>
-                    </div>
-                    <p className="text-xs font-semibold text-gray-500">Did this meetup happen?</p>
-                    <div className="flex gap-2">
                       <button
-                        onClick={async () => {
-                          await updateMeetup(m.id, { completed: true });
-                          setMeetups((prev) => prev.map((x) => x.id === m.id ? { ...x, completed: true } : x));
-                        }}
-                        className="flex-1 py-1.5 text-xs font-semibold rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                        onClick={(e) => openEdit(m, e)}
+                        title="Edit meetup"
+                        className="shrink-0 w-7 h-7 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 flex items-center justify-center hover:bg-gray-100 transition-colors"
                       >
-                        ✓ Yes, it happened
-                      </button>
-                      <button
-                        onClick={async () => {
-                          await updateMeetup(m.id, { completed: false });
-                          setMeetups((prev) => prev.map((x) => x.id === m.id ? { ...x, completed: false } : x));
-                        }}
-                        className="flex-1 py-1.5 text-xs font-semibold rounded-xl bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 transition-colors"
-                      >
-                        ✗ Didn't happen
+                        <FiEdit3 size={12} />
                       </button>
                     </div>
+
+                    {!open && (
+                      <>
+                        <p className="text-xs font-semibold text-gray-500">Did this meetup happen?</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => openOutcome(m, true)}
+                            className="flex-1 py-1.5 text-xs font-semibold rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                          >
+                            ✓ Yes, it happened
+                          </button>
+                          <button
+                            onClick={() => openOutcome(m, false)}
+                            className="flex-1 py-1.5 text-xs font-semibold rounded-xl bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 transition-colors"
+                          >
+                            ✗ Didn't happen
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {open && outcome.happened && (
+                      <div className="space-y-2 pt-1">
+                        <label className="text-xs font-semibold text-gray-700">How did it go?</label>
+                        <textarea
+                          value={outcome.outcomeNotes}
+                          onChange={(e) => setOutcome((o) => ({ ...o, outcomeNotes: e.target.value }))}
+                          rows={3}
+                          placeholder="What you talked about, prayer points, next steps…"
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 resize-none"
+                        />
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={outcome.alsoFollowUp}
+                            onChange={(e) => setOutcome((o) => ({ ...o, alsoFollowUp: e.target.checked }))}
+                            className="w-4 h-4 accent-emerald-600"
+                          />
+                          <span className="text-xs text-gray-700 font-medium">
+                            Also mark {m.personName} as followed up
+                          </span>
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setOutcome(null)}
+                            disabled={saving}
+                            className="flex-1 py-2 text-xs font-semibold rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleHappened(m)}
+                            disabled={saving}
+                            className="flex-2 py-2 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition-colors"
+                          >
+                            {saving ? "Saving…" : "Save"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {open && !outcome.happened && (
+                      <div className="space-y-2 pt-1">
+                        <label className="text-xs font-semibold text-gray-700">Reschedule to</label>
+                        <input
+                          type="datetime-local"
+                          value={outcome.newDate}
+                          onChange={(e) => setOutcome((o) => ({ ...o, newDate: e.target.value }))}
+                          className="w-full min-w-0 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500"
+                        />
+                        <p className="text-[11px] text-gray-400">
+                          This meetup gets deleted either way. A new date books a fresh meetup.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setOutcome(null)}
+                            disabled={saving}
+                            className="flex-1 py-2 text-xs font-semibold rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleMissed(m)}
+                            disabled={saving}
+                            className="flex-2 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition-colors"
+                          >
+                            {saving ? "Saving…" : outcome.newDate ? "Reschedule" : "Delete meetup"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -301,7 +485,12 @@ export default function CalendarPage() {
       {/* Upcoming meetups list */}
       {upcomingMeetups.length > 0 && (
         <div className="mt-6">
-          <p className="text-sm font-bold text-gray-800 mb-2">Upcoming Meetups</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-bold text-gray-800">Upcoming Meetups</p>
+            <button onClick={() => router.push("/meetings")} className="text-xs font-semibold text-blue-600">
+              See all →
+            </button>
+          </div>
           <div className="space-y-2">
             {upcomingMeetups.map((m) => {
                 const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
@@ -328,8 +517,73 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {/* Day modal — what's already booked on a day you tapped */}
+      {modal?.mode === "day" && (
+        <div className="fixed inset-0 z-60 flex items-end md:items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setModal(null)} />
+          <div className="relative bg-white w-full max-w-md rounded-t-3xl md:rounded-2xl shadow-xl flex flex-col" style={{ maxHeight: "85vh" }}>
+            <div className="flex items-center justify-between px-6 pt-6 pb-2 shrink-0">
+              <p className="font-bold text-gray-900">
+                {new Date(modal.dateStr + "T00:00").toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}
+              </p>
+              <button onClick={() => setModal(null)} className="text-gray-400 hover:text-gray-600">
+                <FiX size={20} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 min-h-0 px-6 py-2 space-y-2">
+              {modal.meetups.map((m) => (
+                <div
+                  key={m.id}
+                  onClick={(e) => openEdit(m, e)}
+                  className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-bold text-blue-600">{formatMeetupTime(m.date).split(" ")[0]}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{m.personName}</p>
+                    <p className="text-xs text-gray-400 truncate">
+                      {formatMeetupTime(m.date)}{m.location ? ` · ${m.location}` : ""}
+                    </p>
+                    {m.outcomeNotes && (
+                      <p className="mt-1 pl-2 border-l-2 border-emerald-400 text-xs text-gray-600 italic line-clamp-2">
+                        {m.outcomeNotes}
+                      </p>
+                    )}
+                  </div>
+                  {m.completed === true && (
+                    <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full shrink-0">Done</span>
+                  )}
+                  {m.completed === false && (
+                    <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">Missed</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2 px-6 py-4 pb-8 md:pb-4 shrink-0 border-t border-gray-100">
+              {modal.hasContacts && (
+                <button
+                  onClick={() => router.push(`/summary?date=${modal.dateStr}`)}
+                  className="flex-1 py-3 border border-gray-200 text-gray-700 font-semibold rounded-xl text-sm hover:bg-gray-50 transition-colors"
+                >
+                  Daily summary
+                </button>
+              )}
+              <button
+                onClick={() => openAdd(modal.dateStr)}
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm transition-colors"
+              >
+                Schedule another
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Meetup modal */}
-      {modal && (
+      {modal && modal.mode !== "day" && (
         <div className="fixed inset-0 z-60 flex items-end md:items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setModal(null)} />
           <div className="relative bg-white w-full max-w-md rounded-t-3xl md:rounded-2xl shadow-xl flex flex-col" style={{ maxHeight: "85vh" }}>

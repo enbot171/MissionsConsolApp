@@ -7,6 +7,7 @@ import {
   getDocs,
   onSnapshot,
   updateDoc,
+  getCountFromServer,
   deleteDoc,
   query,
   where,
@@ -338,14 +339,41 @@ export const getMeetupsByPerson = async (personId) => {
   });
 };
 
-export const getMeetupsByAssignee = async (uid) => {
+export const getMeetup = async (id) => {
+  const snap = await getDoc(doc(db, "meetups", id));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+};
+
+// `since`/`until` bound the read — without them this scans every meetup the user
+// has ever created. Callers that only render recent/upcoming should always pass one.
+export const getMeetupsByAssignee = async (uid, { since, until } = {}) => {
   const q = query(
     collection(db, "meetups"),
     where("assignedTo", "==", uid),
+    ...(since ? [where("date", ">=", Timestamp.fromDate(since))] : []),
+    ...(until ? [where("date", "<", Timestamp.fromDate(until))] : []),
     orderBy("date", "asc")
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
+export const getMeetupsForMonth = (uid, year, month) =>
+  getMeetupsByAssignee(uid, {
+    since: new Date(year, month, 1),
+    until: new Date(year, month + 1, 1),
+  });
+
+// Server-side count — avoids downloading every meetup just to show a stat.
+export const countCompletedMeetups = async (uid, since) => {
+  const q = query(
+    collection(db, "meetups"),
+    where("assignedTo", "==", uid),
+    where("completed", "==", true),
+    ...(since ? [where("date", ">=", Timestamp.fromDate(since))] : [])
+  );
+  const snap = await getCountFromServer(q);
+  return snap.data().count;
 };
 
 export const updateMeetup = async (id, data) => {
