@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getPeopleByAssignee, getTeamPeopleAndNoContact, getNoContactByAssignee, getMeetupsByAssignee, updatePerson } from "@/lib/firestore";
-import { serverTimestamp } from "firebase/firestore";
+import { getPeopleByAssignee, getTeamPeopleAndNoContact, getNoContactByAssignee, getMeetupsByAssignee, countCompletedMeetups } from "@/lib/firestore";
+import { useFollowUpLog } from "@/hooks/useFollowUpLog";
 import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import Spinner from "@/components/Spinner";
@@ -77,15 +77,6 @@ function toDate(val) {
   return new Date(val);
 }
 
-function countMeetups(meetups, period) {
-  const start = getPeriodStart(period);
-  if (!start) return meetups.length;
-  return meetups.filter((m) => {
-    const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
-    return d >= start;
-  }).length;
-}
-
 function countTalkedTo(contacts, noContact, period) {
   const start = getPeriodStart(period);
   const all = [...contacts, ...noContact];
@@ -131,35 +122,52 @@ export default function Dashboard() {
   const [teamNoContact, setTeamNoContact] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [period, setPeriod] = useState("Weekly");
-  const [allMeetups, setAllMeetups] = useState([]);
+  const [todayMeetups, setTodayMeetups] = useState([]);
   const [upcomingMeetups, setUpcomingMeetups] = useState([]);
-  const [texting, setTexting] = useState(new Set());
+  const [meetupStat, setMeetupStat] = useState({ period: null, count: null });
+
+  const patchPerson = useCallback((id, patch) => {
+    setMyPeople((prev) => prev.map((p) => p.id === id ? { ...p, ...patch } : p));
+  }, []);
+
+  const { cardProps } = useFollowUpLog(patchPerson);
 
   useEffect(() => {
     if (!user) return;
     setStatsLoading(true);
     const fetchAll = async () => {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
       const [mine, myNC, teamResult, meetups] = await Promise.all([
         getPeopleByAssignee(user.uid),
         getNoContactByAssignee(user.uid),
         profile?.teamId
           ? getTeamPeopleAndNoContact(profile.teamId)
           : Promise.resolve({ people: [], noContact: [] }),
-        getMeetupsByAssignee(user.uid),
+        // Only today onward — the dashboard never renders past meetups.
+        getMeetupsByAssignee(user.uid, { since: startOfToday }),
       ]);
       setMyPeople(mine);
       setMyNoContact(myNC);
       setTeamPeople(teamResult.people);
       setTeamNoContact(teamResult.noContact);
-      setAllMeetups(meetups);
-      const now = new Date();
-      setUpcomingMeetups(meetups.filter((m) => {
-        const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
-        return d >= now;
-      }).slice(0, 3));
+
+      const endOfToday = new Date(startOfToday);
+      endOfToday.setDate(endOfToday.getDate() + 1);
+      const withDate = meetups.map((m) => ({ ...m, _d: m.date?.toDate ? m.date.toDate() : new Date(m.date) }));
+      setTodayMeetups(withDate.filter((m) => m._d < endOfToday));
+      setUpcomingMeetups(withDate.filter((m) => m._d >= endOfToday).slice(0, 3));
     };
     fetchAll().finally(() => setStatsLoading(false));
   }, [user, profile?.teamId]);
+
+  // Counted server-side so the all-time stat doesn't require downloading every meetup.
+  useEffect(() => {
+    if (!user) return;
+    // Tagged with its period so a stale in-flight count can't paint the wrong number.
+    countCompletedMeetups(user.uid, getPeriodStart(period))
+      .then((count) => setMeetupStat({ period, count }));
+  }, [user, period]);
 
   if (loading) return <Spinner fullScreen />;
 
@@ -172,20 +180,10 @@ export default function Dashboard() {
 
   const myTalkedTo = statsLoading ? null : countTalkedTo(myPeople, myNoContact, period);
   const teamTalkedTo = statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period);
-  const myMeetupCount = statsLoading ? null : countMeetups(allMeetups.filter((m) => m.completed === true), period);
   const followUpDays = profile?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
   const inactivityDays = profile?.inactivityCheckDays ?? DEFAULT_INACTIVITY_DAYS;
   const overduePeople = statsLoading ? [] : getOverduePeople(myPeople, followUpDays, inactivityDays);
   const overdueCount = overduePeople.length;
-
-  const handleTexted = async (person) => {
-    setTexting((prev) => new Set([...prev, person.id]));
-    await updatePerson(person.id, { lastFollowedUpAt: serverTimestamp() });
-    setMyPeople((prev) => prev.map((p) =>
-      p.id === person.id ? { ...p, lastFollowedUpAt: { toDate: () => new Date() } } : p
-    ));
-    setTexting((prev) => { const n = new Set(prev); n.delete(person.id); return n; });
-  };
 
   const myMetrics = [
     { label: "Talked To",        value: myTalkedTo,           border: "border-violet-600" },
@@ -194,7 +192,7 @@ export default function Dashboard() {
     { label: "Prayed For",       value: myStats?.prayedFor,   border: "border-teal-600" },
     { label: "Salvations",       value: myStats?.salvations,  border: "border-amber-600" },
     { label: "Active Disciples", value: myDisciples,          border: "border-emerald-700" },
-    { label: "Meetups",          value: myMeetupCount,        border: "border-pink-600" },
+    { label: "Meetups",          value: meetupStat.period === period ? meetupStat.count : null, border: "border-pink-600" },
   ];
 
   const teamMetrics = [
@@ -264,6 +262,35 @@ export default function Dashboard() {
               </button>
             </div>
 
+            {/* Today's meetups — the thing you need before you need anything else */}
+            {todayMeetups.length > 0 && (
+              <div>
+                <p className="text-sm font-bold text-gray-800 mb-2">
+                  Today <span className="text-blue-600 font-semibold">({todayMeetups.length})</span>
+                </p>
+                <div className="space-y-2">
+                  {todayMeetups.map((m) => (
+                    <div
+                      key={m.id}
+                      onClick={() => router.push(`/calendar?editMeetup=${m.id}`)}
+                      className="bg-white rounded-xl border-2 border-blue-200 shadow-sm px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-blue-50 transition-colors"
+                    >
+                      <div className="w-11 h-8 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                        <span className="text-[11px] font-bold text-blue-600 tabular-nums">
+                          {m._d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{m.personName}</p>
+                        {m.location && <p className="text-xs text-gray-500 truncate">{m.location}</p>}
+                        {m.notes && <p className="text-xs text-gray-400 truncate">{m.notes}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Follow-ups to-do */}
             {overduePeople.length > 0 && (
               <div>
@@ -271,14 +298,12 @@ export default function Dashboard() {
                   <p className="text-sm font-bold text-gray-800">
                     Follow-ups <span className="text-rose-500 font-semibold">({overdueCount})</span>
                   </p>
-                  {overdueCount > 5 && (
-                    <button onClick={() => router.push("/follow-ups")} className="text-xs font-semibold text-rose-500">
-                      See all →
-                    </button>
-                  )}
+                  <button onClick={() => router.push("/follow-ups")} className="text-xs font-semibold text-rose-500">
+                    See all →
+                  </button>
                 </div>
                 <div className="space-y-2">
-                  {overduePeople.slice(0, 5).map((p) => {
+                  {overduePeople.slice(0, 3).map((p) => {
                     const ref = getRefDate(p);
                     const scheduled = getScheduledDate(p);
                     const today = new Date(); today.setHours(0,0,0,0);
@@ -295,8 +320,7 @@ export default function Dashboard() {
                         badge={badge}
                         badgeColor="text-rose-500"
                         onNavigate={() => router.push(`/person/${p.id}`)}
-                        onCheck={handleTexted}
-                        acting={texting.has(p.id) ? "checking" : null}
+                        {...cardProps(p)}
                       />
                     );
                   })}
@@ -314,7 +338,7 @@ export default function Dashboard() {
                     return (
                       <div
                         key={m.id}
-                        onClick={() => router.push("/calendar")}
+                        onClick={() => router.push(`/calendar?editMeetup=${m.id}`)}
                         className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
                       >
                         <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
@@ -330,7 +354,7 @@ export default function Dashboard() {
                       </div>
                     );
                   })}
-                  <button onClick={() => router.push("/calendar")} className="w-full text-center text-xs font-semibold text-blue-600 py-1">
+                  <button onClick={() => router.push("/meetings")} className="w-full text-center text-xs font-semibold text-blue-600 py-1">
                     See all →
                   </button>
                 </div>
