@@ -1,16 +1,100 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getTeam, updateUserProfile } from "@/lib/firestore";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { callApi } from "@/lib/google/client";
 import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import { useSidebar } from "@/context/SidebarContext";
 import { FiLogOut, FiShield } from "react-icons/fi";
 import { DEFAULT_FOLLOW_UP_DAYS, DEFAULT_INACTIVITY_DAYS } from "@/config/app";
+
+const GOOGLE_BANNER = {
+  connected: { text: "Google Calendar connected.", className: "bg-emerald-50 text-emerald-700 border-emerald-100" },
+  denied: { text: "Connection cancelled.", className: "bg-gray-50 text-gray-600 border-gray-100" },
+  norefresh: {
+    text: "Google didn't return a refresh token. Disconnect the app at myaccount.google.com/permissions and try again.",
+    className: "bg-amber-50 text-amber-700 border-amber-100",
+  },
+  error: { text: "Couldn't connect to Google Calendar. Try again.", className: "bg-red-50 text-red-700 border-red-100" },
+};
+
+function GoogleStatusBanner({ setGoogleStatus }) {
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const status = searchParams.get("google");
+    if (status && GOOGLE_BANNER[status]) setGoogleStatus(status);
+  }, [searchParams, setGoogleStatus]);
+  return null;
+}
+
+function GoogleCalendarCard() {
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(() => {
+    callApi("/api/google/status").then(setStatus).catch(() => setStatus({ connected: false }));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const connect = async () => {
+    setBusy(true); setError("");
+    try {
+      const { url } = await callApi("/api/google/connect");
+      window.location.href = url;
+    } catch (e) { setError(e.message); setBusy(false); }
+  };
+
+  const disconnect = async () => {
+    setBusy(true); setError("");
+    try { await callApi("/api/google/disconnect"); load(); }
+    catch (e) { setError(e.message); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+      <div>
+        <p className="text-sm font-semibold text-gray-900">Google Calendar</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Put your scheduled meetings on your own Google Calendar, and pull changes back.
+        </p>
+      </div>
+
+      {status?.connected ? (
+        <>
+          <p className="text-xs font-semibold text-emerald-600">Connected</p>
+          <p className="text-[11px] text-gray-400">
+            Google requires re-connecting about once a week while the app is unverified.
+          </p>
+          <button
+            onClick={disconnect}
+            disabled={busy}
+            className="w-full py-2.5 border border-gray-200 text-gray-700 font-semibold rounded-xl text-sm hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            {busy ? "Working…" : "Disconnect"}
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={connect}
+          disabled={busy || !status}
+          className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm disabled:opacity-50 transition-colors"
+        >
+          {busy ? "Opening Google…" : "Connect Google Calendar"}
+        </button>
+      )}
+
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
 
 export default function Settings() {
   const { user, profile, loading } = useRequireAuth();
@@ -22,6 +106,7 @@ export default function Settings() {
   const [inactivityDays, setInactivityDays] = useState(null);
   const [savingReminders, setSavingReminders] = useState(false);
   const [savedReminders, setSavedReminders] = useState(false);
+  const [googleStatus, setGoogleStatus] = useState(null);
 
   useEffect(() => {
     if (profile?.teamId) {
@@ -65,6 +150,16 @@ export default function Settings() {
 
         <main className="flex-1 pb-24 md:pb-10 -mt-4 px-4">
           <div className="max-w-lg mx-auto md:max-w-3xl space-y-3">
+
+            <Suspense fallback={null}>
+              <GoogleStatusBanner setGoogleStatus={setGoogleStatus} />
+            </Suspense>
+
+            {googleStatus && GOOGLE_BANNER[googleStatus] && (
+              <div className={`rounded-2xl border px-4 py-3 text-xs font-semibold ${GOOGLE_BANNER[googleStatus].className}`}>
+                {GOOGLE_BANNER[googleStatus].text}
+              </div>
+            )}
 
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
               <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">My Account</p>
@@ -123,6 +218,8 @@ export default function Settings() {
                 {savingReminders ? "Saving…" : savedReminders ? "Saved!" : "Save"}
               </button>
             </div>
+
+            <GoogleCalendarCard />
 
             {profile?.role === "Admin" && (
               <button
