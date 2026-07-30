@@ -8,6 +8,7 @@ function toDate(value) {
 
 export function meetupToEvent(meetup, { durationMinutes = DEFAULT_DURATION_MINUTES } = {}) {
   const start = toDate(meetup.date);
+  if (!start) throw new Error("Meetup has no date");
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
 
   return {

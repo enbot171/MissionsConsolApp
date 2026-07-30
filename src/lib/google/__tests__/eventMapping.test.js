@@ -35,6 +35,10 @@ describe("meetupToEvent", () => {
     expect(e.location).toBeUndefined();
     expect(e.description).toBeUndefined();
   });
+
+  it("throws a named error when the meetup has no date", () => {
+    expect(() => meetupToEvent({ ...meetup, date: null })).toThrow("Meetup has no date");
+  });
 });
 
 describe("eventToMeetupPatch", () => {
