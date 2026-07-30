@@ -1,7 +1,7 @@
 import { google } from "googleapis";
 import { getAuth } from "firebase-admin/auth";
 import { adminDb } from "@/lib/firebaseAdmin";
-import { authedClientFor } from "@/lib/google/tokens";
+import { authedClientFor, isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
 import { meetupToEvent } from "@/lib/google/eventMapping";
 
 export const runtime = "nodejs";
@@ -40,10 +40,18 @@ export async function POST(request) {
       ? snap.data().googleEventId
       : null;
     if (eventId) {
-      // 404/410 mean it's already gone from Google, which is the desired end state.
-      await calendar.events.delete({ calendarId: "primary", eventId }).catch((e) => {
-        if (![404, 410].includes(e?.code)) throw e;
-      });
+      try {
+        // 404/410 mean it's already gone from Google, which is the desired end state.
+        await calendar.events.delete({ calendarId: "primary", eventId }).catch((e) => {
+          if (![404, 410].includes(e?.code)) throw e;
+        });
+      } catch (e) {
+        // A grant that died (weekly, in Testing mode) is not a server error —
+        // record it so the UI can ask for a reconnect instead of lying green.
+        if (!isDeadGrant(e)) throw e;
+        await markNeedsReconnect(uid);
+        return Response.json({ ok: false, reason: "needs_reconnect" });
+      }
     }
     return Response.json({ ok: true });
   }
@@ -55,17 +63,23 @@ export async function POST(request) {
   const body = meetupToEvent(meetup);
   let eventId = meetup.googleEventId;
 
-  if (eventId) {
-    await calendar.events.patch({ calendarId: "primary", eventId, requestBody: body })
-      .catch(async (e) => {
-        if (![404, 410].includes(e?.code)) throw e;
-        // The event was deleted in Google; recreate rather than dropping the link.
-        const created = await calendar.events.insert({ calendarId: "primary", requestBody: body });
-        eventId = created.data.id;
-      });
-  } else {
-    const created = await calendar.events.insert({ calendarId: "primary", requestBody: body });
-    eventId = created.data.id;
+  try {
+    if (eventId) {
+      await calendar.events.patch({ calendarId: "primary", eventId, requestBody: body })
+        .catch(async (e) => {
+          if (![404, 410].includes(e?.code)) throw e;
+          // The event was deleted in Google; recreate rather than dropping the link.
+          const created = await calendar.events.insert({ calendarId: "primary", requestBody: body });
+          eventId = created.data.id;
+        });
+    } else {
+      const created = await calendar.events.insert({ calendarId: "primary", requestBody: body });
+      eventId = created.data.id;
+    }
+  } catch (e) {
+    if (!isDeadGrant(e)) throw e;
+    await markNeedsReconnect(uid);
+    return Response.json({ ok: false, reason: "needs_reconnect" });
   }
 
   await ref.set({ googleEventId: eventId, syncedAt: Date.now() }, { merge: true });

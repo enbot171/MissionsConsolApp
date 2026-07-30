@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { openChannel } from "@/lib/google/watch";
 import { requireEnv } from "@/lib/google/env";
+import { isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -34,7 +35,8 @@ export async function GET(request) {
       renewed++;
     } catch (e) {
       // A user whose refresh token expired (Testing mode, 7 days) fails here.
-      // That's expected; they reconnect from settings.
+      // That's expected; flag it so settings can prompt them to reconnect.
+      if (isDeadGrant(e)) await markNeedsReconnect(doc.id).catch(() => {});
       console.error("renew failed", doc.id, e?.message);
       failed++;
     }

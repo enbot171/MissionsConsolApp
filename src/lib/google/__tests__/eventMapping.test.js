@@ -62,6 +62,10 @@ describe("eventToMeetupPatch", () => {
     expect(eventToMeetupPatch({ status: "confirmed", start: { date: "2026-08-13" } })).toBeNull();
   });
 
+  it("returns null for an unparseable dateTime instead of an Invalid Date", () => {
+    expect(eventToMeetupPatch({ status: "confirmed", start: { dateTime: "not a date" } })).toBeNull();
+  });
+
   it("defaults missing location and notes to empty strings", () => {
     const patch = eventToMeetupPatch({ status: "confirmed", start: { dateTime: "2026-08-13T09:30:00Z" } });
     expect(patch.location).toBe("");

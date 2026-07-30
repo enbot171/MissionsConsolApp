@@ -32,8 +32,14 @@ export function eventToMeetupPatch(event) {
   const dateTime = event.start?.dateTime;
   if (!dateTime) return null;
 
+  // An unparseable dateTime yields an Invalid Date, which only blows up later
+  // at Timestamp.fromDate() inside the webhook's catch — killing the whole
+  // sync pull silently. Treat it as unmappable here, like the other cases.
+  const date = new Date(dateTime);
+  if (Number.isNaN(date.getTime())) return null;
+
   return {
-    date: new Date(dateTime),
+    date,
     location: event.location || "",
     notes: event.description || "",
   };

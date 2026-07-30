@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { google } from "googleapis";
 import { adminDb } from "@/lib/firebaseAdmin";
-import { authedClientFor, loadTokens, saveTokens } from "@/lib/google/tokens";
+import { authedClientFor, loadTokens, saveTokens, isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
 import { eventToMeetupPatch, shouldApplyRemote } from "@/lib/google/eventMapping";
 import { requireEnv } from "@/lib/google/env";
 import { Timestamp } from "firebase-admin/firestore";
@@ -28,7 +28,12 @@ export async function POST(request) {
   if (found.empty) return new Response("OK", { status: 200 });
 
   const uid = found.docs[0].id;
-  await pullChanges(uid).catch((e) => console.error("google sync failed", uid, e));
+  await pullChanges(uid).catch(async (e) => {
+    // A dead grant is expected weekly in Testing mode. Flag it so the settings
+    // card can ask for a reconnect rather than silently going stale.
+    if (isDeadGrant(e)) await markNeedsReconnect(uid).catch(() => {});
+    console.error("google sync failed", uid, e);
+  });
   return new Response("OK", { status: 200 });
 }
 
@@ -46,8 +51,11 @@ async function pullChanges(uid) {
   let pageToken;
   let nextSyncToken;
 
-  // A webhook has a hard execution limit. Stopping early is safe: the sync
-  // token is only saved after a complete pass, so the next ping resumes.
+  // A webhook has a hard execution limit, so the pull stops after this many
+  // pages. Stopping early does NOT resume: no pageToken is persisted, and the
+  // sync token is only saved after a complete pass, so the next notification
+  // restarts the pull from the beginning. A calendar large enough to exceed
+  // this cap would therefore never finish a pass.
   const MAX_PAGES = 20;
   let pages = 0;
 

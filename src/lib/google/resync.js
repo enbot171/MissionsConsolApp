@@ -1,0 +1,64 @@
+import { google } from "googleapis";
+import { adminDb } from "@/lib/firebaseAdmin";
+import { authedClientFor, isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
+import { meetupToEvent } from "@/lib/google/eventMapping";
+
+// While a grant is dead every meetup edit still saves locally but never reaches
+// Google, and the echo guard rightly refuses to let Google's stale copy win. So
+// after a reconnect nothing would ever repair the calendar. This pushes the
+// current state of every upcoming meetup back out.
+const MAX_MEETUPS = 50;
+
+export async function resyncUpcoming(uid) {
+  const client = await authedClientFor(uid);
+  if (!client) return { ok: false, reason: "not_connected" };
+
+  const calendar = google.calendar({ version: "v3", auth: client });
+  const db = adminDb();
+
+  // Only future meetings are repaired. Past ones are history — recreating them
+  // would spray old events across a calendar the user has already moved on from.
+  const snap = await db
+    .collection("meetups")
+    .where("assignedTo", "==", uid)
+    .where("date", ">=", new Date())
+    .orderBy("date", "asc")
+    .limit(MAX_MEETUPS)
+    .get();
+
+  let synced = 0, failed = 0;
+
+  for (const doc of snap.docs) {
+    const meetup = { id: doc.id, ...doc.data() };
+    try {
+      const body = meetupToEvent(meetup);
+      let eventId = meetup.googleEventId;
+
+      if (eventId) {
+        await calendar.events.patch({ calendarId: "primary", eventId, requestBody: body })
+          .catch(async (e) => {
+            // 404/410: deleted in Google while we were disconnected. Recreate.
+            if (![404, 410].includes(e?.code)) throw e;
+            const created = await calendar.events.insert({ calendarId: "primary", requestBody: body });
+            eventId = created.data.id;
+          });
+      } else {
+        const created = await calendar.events.insert({ calendarId: "primary", requestBody: body });
+        eventId = created.data.id;
+      }
+
+      await doc.ref.set({ googleEventId: eventId, syncedAt: Date.now() }, { merge: true });
+      synced++;
+    } catch (e) {
+      if (isDeadGrant(e)) {
+        // The grant died mid-run; nothing further will succeed.
+        await markNeedsReconnect(uid).catch(() => {});
+        return { ok: false, reason: "needs_reconnect", synced, failed };
+      }
+      console.error("resync failed", uid, doc.id, e?.message);
+      failed++;
+    }
+  }
+
+  return { ok: true, synced, failed };
+}

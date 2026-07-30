@@ -3,6 +3,7 @@ import { verifyState } from "@/lib/google/state";
 import { saveTokens } from "@/lib/google/tokens";
 import { requireEnv } from "@/lib/google/env";
 import { openChannel } from "@/lib/google/watch";
+import { resyncUpcoming } from "@/lib/google/resync";
 
 export const runtime = "nodejs";
 
@@ -35,10 +36,17 @@ export async function GET(request) {
       refreshToken: tokens.refresh_token,
       calendarId: "primary",
       connectedAt: Date.now(),
+      // A fresh grant clears any earlier "reconnect me" state.
+      needsReconnect: false,
     });
     // Best-effort: a failed watch shouldn't make the connection itself fail.
     // The renew cron will pick it up within a day.
     await openChannel(uid).catch(() => {});
+    // Meetup edits made while the grant was dead never reached Google, and
+    // inbound sync won't fix them (Google's copy is older, so the echo guard
+    // rejects it). Push upcoming meetups out now. This is a redirect, so it has
+    // to happen inline — but a failure must never strand the user here.
+    await resyncUpcoming(uid).catch(() => {});
     return back("connected");
   } catch {
     return back("error");
