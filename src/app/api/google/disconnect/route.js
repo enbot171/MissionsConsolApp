@@ -1,6 +1,7 @@
 import { getAuth } from "firebase-admin/auth";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { deleteTokens } from "@/lib/google/tokens";
+import { stopChannel } from "@/lib/google/watch";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,7 @@ export async function POST(request) {
   try {
     adminDb();
     const { uid } = await getAuth().verifyIdToken(idToken);
+    await stopChannel(uid).catch(() => {});
     await deleteTokens(uid);
     return Response.json({ ok: true });
   } catch {

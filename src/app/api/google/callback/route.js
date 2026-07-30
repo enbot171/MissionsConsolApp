@@ -2,6 +2,7 @@ import { oauthClient } from "@/lib/google/oauth";
 import { verifyState } from "@/lib/google/state";
 import { saveTokens } from "@/lib/google/tokens";
 import { requireEnv } from "@/lib/google/env";
+import { openChannel } from "@/lib/google/watch";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,9 @@ export async function GET(request) {
       calendarId: "primary",
       connectedAt: Date.now(),
     });
+    // Best-effort: a failed watch shouldn't make the connection itself fail.
+    // The renew cron will pick it up within a day.
+    await openChannel(uid).catch(() => {});
     return back("connected");
   } catch {
     return back("error");
