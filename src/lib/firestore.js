@@ -324,6 +324,7 @@ export const addMeetup = async (data) => {
     date: Timestamp.fromDate(meetupDate),
     completed: meetupDate < new Date() ? true : null,
     createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
   return ref.id;
 };
@@ -380,6 +381,7 @@ export const updateMeetup = async (id, data) => {
   await updateDoc(doc(db, "meetups", id), {
     ...data,
     ...(data.date ? { date: Timestamp.fromDate(new Date(data.date)) } : {}),
+    updatedAt: serverTimestamp(),
   });
 };
 

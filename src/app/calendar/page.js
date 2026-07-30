@@ -15,8 +15,13 @@ import {
   deleteMeetup,
 } from "@/lib/firestore";
 import { serverTimestamp } from "firebase/firestore";
+import { callApi } from "@/lib/google/client";
 import PageShell from "@/components/PageShell";
 import { FiChevronLeft, FiChevronRight, FiPlus, FiX, FiTrash2, FiEdit3 } from "react-icons/fi";
+
+// Google is best-effort: a sync failure must never block the meetup itself.
+const pushToGoogle = (meetupId, action) =>
+  callApi("/api/google/sync", { meetupId, action }).catch(() => {});
 
 // How far back the confirmation/upcoming lists look. Bounds the read so the page
 // doesn't scan every meetup ever created.
@@ -168,9 +173,11 @@ export default function CalendarPage() {
     if (!form.personId || !form.date) return;
     setSaving(true);
     if (modal.mode === "add") {
-      await addMeetup({ ...form, assignedTo: user.uid, teamId: profile?.teamId || "" });
+      const newId = await addMeetup({ ...form, assignedTo: user.uid, teamId: profile?.teamId || "" });
+      pushToGoogle(newId, "upsert");
     } else {
       await updateMeetup(modal.meetup.id, form);
+      pushToGoogle(modal.meetup.id, "upsert");
     }
     await Promise.all([
       reloadLists(),
@@ -182,6 +189,8 @@ export default function CalendarPage() {
 
   const handleDelete = async () => {
     setSaving(true);
+    // The route reads googleEventId off the doc, so push before it's gone.
+    await pushToGoogle(modal.meetup.id, "delete");
     await deleteMeetup(modal.meetup.id);
     setMeetups((prev) => prev.filter((m) => m.id !== modal.meetup.id));
     setMonthMeetups((prev) => prev.filter((m) => m.id !== modal.meetup.id));
@@ -225,9 +234,11 @@ export default function CalendarPage() {
   // A new date is just a new meetup, with no link back to the deleted one.
   const handleMissed = async (meetup) => {
     setSaving(true);
+    // The route reads googleEventId off the doc, so push before it's gone.
+    await pushToGoogle(meetup.id, "delete");
     await deleteMeetup(meetup.id);
     if (outcome.newDate) {
-      await addMeetup({
+      const newId = await addMeetup({
         personId: meetup.personId,
         personName: meetup.personName,
         date: outcome.newDate,
@@ -236,6 +247,7 @@ export default function CalendarPage() {
         assignedTo: user.uid,
         teamId: profile?.teamId || "",
       });
+      pushToGoogle(newId, "upsert");
     }
     await Promise.all([
       reloadLists(),
