@@ -34,7 +34,11 @@ export async function POST(request) {
   const snap = await ref.get();
 
   if (action === "delete") {
-    const eventId = snap.exists ? snap.data().googleEventId : null;
+    // Same ownership rule as upsert. Returns ok rather than 403 so the caller
+    // can't use this route to probe which meetup ids exist.
+    const eventId = snap.exists && snap.data().assignedTo === uid
+      ? snap.data().googleEventId
+      : null;
     if (eventId) {
       // 404/410 mean it's already gone from Google, which is the desired end state.
       await calendar.events.delete({ calendarId: "primary", eventId }).catch((e) => {
