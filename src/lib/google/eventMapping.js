@@ -38,3 +38,20 @@ export function eventToMeetupPatch(event) {
     notes: event.description || "",
   };
 }
+
+// Our own outbound push comes straight back as a notification. Anything Google
+// reports within this window of our last push is treated as that echo.
+const ECHO_WINDOW_MS = 3000;
+
+export function shouldApplyRemote(event, meetup) {
+  const updated = event?.updated ? Date.parse(event.updated) : null;
+  if (!updated) return true;
+
+  if (meetup?.syncedAt && updated - meetup.syncedAt < ECHO_WINDOW_MS) return false;
+
+  // Last write wins: a local edit newer than Google's version stands.
+  const localMs = meetup?.updatedAt?.toMillis?.() ?? null;
+  if (localMs && localMs > updated) return false;
+
+  return true;
+}

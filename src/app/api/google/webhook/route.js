@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { google } from "googleapis";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { authedClientFor, loadTokens, saveTokens } from "@/lib/google/tokens";
-import { eventToMeetupPatch } from "@/lib/google/eventMapping";
+import { eventToMeetupPatch, shouldApplyRemote } from "@/lib/google/eventMapping";
 import { requireEnv } from "@/lib/google/env";
 import { Timestamp } from "firebase-admin/firestore";
 
@@ -86,6 +86,7 @@ async function applyEvent(uid, event) {
   const ref = db.collection("meetups").doc(meetupId);
   const snap = await ref.get();
   if (!snap.exists || snap.data().assignedTo !== uid) return;
+  if (!shouldApplyRemote(event, snap.data())) return;
 
   const patch = eventToMeetupPatch(event);
   if (!patch) {
