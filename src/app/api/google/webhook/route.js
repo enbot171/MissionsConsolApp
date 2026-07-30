@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { google } from "googleapis";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { authedClientFor, loadTokens, saveTokens } from "@/lib/google/tokens";
@@ -9,7 +10,12 @@ export const runtime = "nodejs";
 
 export async function POST(request) {
   // Notifications carry no body — everything is in the X-Goog-* headers.
-  if (request.headers.get("x-goog-channel-token") !== requireEnv("GOOGLE_WEBHOOK_TOKEN")) {
+  // This header is the endpoint's whole auth boundary — compare in constant time.
+  const token = request.headers.get("x-goog-channel-token") || "";
+  const expected = requireEnv("GOOGLE_WEBHOOK_TOKEN");
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     return new Response("Forbidden", { status: 403 });
   }
 
@@ -40,6 +46,11 @@ async function pullChanges(uid) {
   let pageToken;
   let nextSyncToken;
 
+  // A webhook has a hard execution limit. Stopping early is safe: the sync
+  // token is only saved after a complete pass, so the next ping resumes.
+  const MAX_PAGES = 20;
+  let pages = 0;
+
   do {
     let res;
     try {
@@ -59,7 +70,7 @@ async function pullChanges(uid) {
 
     pageToken = res.data.nextPageToken;
     nextSyncToken = res.data.nextSyncToken || nextSyncToken;
-  } while (pageToken);
+  } while (pageToken && ++pages < MAX_PAGES);
 
   if (nextSyncToken) await saveTokens(uid, { syncToken: nextSyncToken });
 }
@@ -78,7 +89,10 @@ async function applyEvent(uid, event) {
 
   const patch = eventToMeetupPatch(event);
   if (!patch) {
-    await ref.delete();
+    // Only an actual cancellation removes the meetup. An event we simply can't
+    // represent — an all-day conversion, say — is left alone; deleting on that
+    // would destroy a meetup because someone toggled a checkbox in Google.
+    if (event.status === "cancelled") await ref.delete();
     return;
   }
 
