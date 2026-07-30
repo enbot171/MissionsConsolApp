@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { openChannel } from "@/lib/google/watch";
 import { requireEnv } from "@/lib/google/env";
@@ -10,7 +11,12 @@ export const maxDuration = 60;
 const RENEW_WITHIN_MS = 48 * 60 * 60 * 1000;
 
 export async function GET(request) {
-  if (request.headers.get("authorization") !== `Bearer ${requireEnv("CRON_SECRET")}`) {
+  // Same auth boundary reasoning as the webhook route — compare in constant time.
+  const provided = request.headers.get("authorization") || "";
+  const expected = `Bearer ${requireEnv("CRON_SECRET")}`;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     return new Response("Forbidden", { status: 403 });
   }
 
