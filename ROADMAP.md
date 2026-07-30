@@ -28,7 +28,24 @@ A church/missions CG (Connect Group) management system. Real-time contact tracki
 - [ ] `/meetings` is unreachable on mobile when the list is empty (both "See all" links are conditional)
 - [ ] Dashboard's `getOverduePeople` and `classifyPeople` use different rules and can disagree on who's overdue
 
-### Google Calendar two-way sync — designed, not built
+### Google Calendar two-way sync — BUILT, not yet verified live
+
+Built 2026-07-30 across 13 commits (`ade70a8`..`4064786`). Meetups mirror to each user's own Google Calendar; Google-side changes flow back through a webhook. Refresh tokens live in `googleTokens/{uid}`, denied to every client by rules and reachable only by the Admin SDK. A daily Vercel cron renews Google's watch channels, which expire and cannot be renewed in place.
+
+**Nothing has been run against a real Google account.** The 23 unit tests cover pure logic only — event mapping, signed state, the echo guard, env handling. All eight route handlers are verified by `next build` alone. Before trusting this in any way:
+
+- [ ] Create `.env.local` (template in the plan, Task 0 Step 5) and run the OAuth round trip locally
+- [ ] Confirm a meetup appears in Google Calendar, and that editing and deleting it there propagates
+- [ ] Deploy to Vercel, add the deployed callback URL to the OAuth client, set every env var including `CRON_SECRET`
+- [ ] Reconnect on the deployed URL so a watch channel opens against a public HTTPS address — Google refuses localhost
+- [ ] Drag an event in Google and confirm the app updates
+- [ ] Confirm the cron job registered in Vercel → Cron Jobs
+
+**Known limits that remain** (full detail in the plan): a Firestore write failing after a successful `events.insert` can leave a duplicate calendar event nothing will clean up; deletes block the UI on Google despite outbound being documented as best-effort; a webhook pull truncated at 20 pages restarts rather than resumes; disconnecting leaves mirrored events on the user's calendar with no in-app way to remove them; event duration and title are app-owned and silently revert Google-side changes.
+
+The weekly grant expiry (Testing mode) is now detected — the settings card shows an amber Reconnect state, and reconnecting re-pushes up to 50 future meetups to repair whatever drifted while disconnected.
+
+### Original design notes
 
 Decided to build this, deferred until the meeting changes have been used for real. **Scope: meetups only.** Follow-ups stay in-app; contacts are never invited as attendees (there is no email field on a person — `CONTACT_TYPES` is LineID / InstagramID / HellotalkID / Others).
 
