@@ -50,5 +50,11 @@ service cloud.firestore {
     match /meetups/{meetupId} {
       allow read, write: if isAuth();
     }
+
+    // Google refresh tokens. Denied to every client; the Admin SDK bypasses
+    // rules entirely, so only server route handlers can reach these.
+    match /googleTokens/{uid} {
+      allow read, write: if false;
+    }
   }
 }
