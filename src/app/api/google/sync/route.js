@@ -3,6 +3,7 @@ import { getAuth } from "firebase-admin/auth";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { authedClientFor, isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
 import { meetupToEvent } from "@/lib/google/eventMapping";
+import { ensureAppCalendar } from "@/lib/google/calendar";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,7 @@ export async function POST(request) {
   if (!client) return Response.json({ ok: false, reason: "not_connected" });
 
   const calendar = google.calendar({ version: "v3", auth: client });
+  const calendarId = await ensureAppCalendar(uid, client);
   const ref = adminDb().collection("meetups").doc(meetupId);
   const snap = await ref.get();
 
@@ -42,7 +44,7 @@ export async function POST(request) {
     if (eventId) {
       try {
         // 404/410 mean it's already gone from Google, which is the desired end state.
-        await calendar.events.delete({ calendarId: "primary", eventId }).catch((e) => {
+        await calendar.events.delete({ calendarId, eventId }).catch((e) => {
           if (![404, 410].includes(e?.code)) throw e;
         });
       } catch (e) {
@@ -65,15 +67,15 @@ export async function POST(request) {
 
   try {
     if (eventId) {
-      await calendar.events.patch({ calendarId: "primary", eventId, requestBody: body })
+      await calendar.events.patch({ calendarId, eventId, requestBody: body })
         .catch(async (e) => {
           if (![404, 410].includes(e?.code)) throw e;
           // The event was deleted in Google; recreate rather than dropping the link.
-          const created = await calendar.events.insert({ calendarId: "primary", requestBody: body });
+          const created = await calendar.events.insert({ calendarId, requestBody: body });
           eventId = created.data.id;
         });
     } else {
-      const created = await calendar.events.insert({ calendarId: "primary", requestBody: body });
+      const created = await calendar.events.insert({ calendarId, requestBody: body });
       eventId = created.data.id;
     }
   } catch (e) {

@@ -43,6 +43,8 @@ Built 2026-07-30 across 13 commits (`ade70a8`..`4064786`). Meetups mirror to eac
 
 **Known limits that remain** (full detail in the plan): a Firestore write failing after a successful `events.insert` can leave a duplicate calendar event nothing will clean up; deletes block the UI on Google despite outbound being documented as best-effort; a webhook pull truncated at 20 pages restarts rather than resumes; disconnecting leaves mirrored events on the user's calendar with no in-app way to remove them; event duration and title are app-owned and silently revert Google-side changes.
 
+**Events live on a dedicated calendar.** The app requests `calendar.app.created`, which can create secondary calendars and manage events on those alone — it cannot see or touch the user's existing calendars. On first connect it creates a calendar named **Missions Consol App**; meetings sync there, not to the primary calendar. Consequences: a bug in this app can never delete a real appointment, inbound sync never reads anyone's personal schedule, and deleting that one calendar in Google removes every event the app made. If a user deletes the app's calendar manually, they must disconnect and reconnect to have it recreated.
+
 The weekly grant expiry (Testing mode) is now detected — the settings card shows an amber Reconnect state, and reconnecting re-pushes up to 50 future meetups to repair whatever drifted while disconnected.
 
 ### Original design notes

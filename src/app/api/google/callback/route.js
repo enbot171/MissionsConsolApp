@@ -34,7 +34,6 @@ export async function GET(request) {
 
     await saveTokens(uid, {
       refreshToken: tokens.refresh_token,
-      calendarId: "primary",
       // Shown in settings so a user with several Google logins can see which
       // account they actually authorised.
       googleEmail: emailFromIdToken(tokens.id_token),

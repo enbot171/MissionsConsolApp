@@ -43,10 +43,16 @@ async function pullChanges(uid) {
   const calendar = google.calendar({ version: "v3", auth: client });
   const stored = await loadTokens(uid);
 
+  // Only ever read the app's own calendar. No provisioned calendar means there
+  // is nothing of ours to sync — never fall back to the user's primary one.
+  const calendarId =
+    stored?.calendarId && stored.calendarId !== "primary" ? stored.calendarId : null;
+  if (!calendarId) return;
+
   let params = stored?.syncToken
-    ? { calendarId: "primary", syncToken: stored.syncToken }
+    ? { calendarId, syncToken: stored.syncToken }
     // No token yet: seed from now forward. Past events are history we don't want.
-    : { calendarId: "primary", timeMin: new Date().toISOString(), singleEvents: true };
+    : { calendarId, timeMin: new Date().toISOString(), singleEvents: true };
 
   let pageToken;
   let nextSyncToken;

@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { authedClientFor, isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
 import { meetupToEvent } from "@/lib/google/eventMapping";
+import { ensureAppCalendar } from "@/lib/google/calendar";
 
 // While a grant is dead every meetup edit still saves locally but never reaches
 // Google, and the echo guard rightly refuses to let Google's stale copy win. So
@@ -14,6 +15,7 @@ export async function resyncUpcoming(uid) {
   if (!client) return { ok: false, reason: "not_connected" };
 
   const calendar = google.calendar({ version: "v3", auth: client });
+  const calendarId = await ensureAppCalendar(uid, client);
   const db = adminDb();
 
   // Only future meetings are repaired. Past ones are history — recreating them
@@ -35,15 +37,15 @@ export async function resyncUpcoming(uid) {
       let eventId = meetup.googleEventId;
 
       if (eventId) {
-        await calendar.events.patch({ calendarId: "primary", eventId, requestBody: body })
+        await calendar.events.patch({ calendarId, eventId, requestBody: body })
           .catch(async (e) => {
             // 404/410: deleted in Google while we were disconnected. Recreate.
             if (![404, 410].includes(e?.code)) throw e;
-            const created = await calendar.events.insert({ calendarId: "primary", requestBody: body });
+            const created = await calendar.events.insert({ calendarId, requestBody: body });
             eventId = created.data.id;
           });
       } else {
-        const created = await calendar.events.insert({ calendarId: "primary", requestBody: body });
+        const created = await calendar.events.insert({ calendarId, requestBody: body });
         eventId = created.data.id;
       }
 

@@ -2,16 +2,18 @@ import crypto from "node:crypto";
 import { google } from "googleapis";
 import { authedClientFor, loadTokens, saveTokens } from "@/lib/google/tokens";
 import { requireEnv } from "@/lib/google/env";
+import { ensureAppCalendar } from "@/lib/google/calendar";
 
 export async function openChannel(uid) {
   const client = await authedClientFor(uid);
   if (!client) return;
   const calendar = google.calendar({ version: "v3", auth: client });
+  const calendarId = await ensureAppCalendar(uid, client);
 
   // Google gives no way to renew a channel — you replace it with a new id.
   const id = crypto.randomUUID();
   const res = await calendar.events.watch({
-    calendarId: "primary",
+    calendarId,
     requestBody: {
       id,
       type: "web_hook",
