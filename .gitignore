@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Planning docs and agent workspace - local only, never public
+docs/superpowers/
+.superpowers/
