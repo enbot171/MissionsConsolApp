@@ -56,11 +56,40 @@ export function classifyPeople(people, firstFollowUpDays, inactivityDays) {
   return { scheduled, newContact, followUpDue, inactive };
 }
 
-export function countDue(people, profile) {
+/**
+ * Everyone due today, as one list, most urgent first. Each person carries a
+ * `_reason` naming which rule surfaced them, so callers can label them without
+ * re-deriving the rule and drifting from this one.
+ */
+export function dueList(people, profile) {
   const { scheduled, newContact, followUpDue, inactive } = classifyPeople(
     people.filter((p) => !p.noContact),
     profile?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS,
     profile?.inactivityCheckDays ?? DEFAULT_INACTIVITY_DAYS
   );
-  return scheduled.length + newContact.length + followUpDue.length + inactive.length;
+  return [
+    ...scheduled.map((p) => ({ ...p, _reason: "scheduled" })),
+    ...newContact.map((p) => ({ ...p, _reason: "new" })),
+    ...followUpDue.map((p) => ({ ...p, _reason: "due" })),
+    ...inactive.map((p) => ({ ...p, _reason: "inactive" })),
+  ];
+}
+
+// Short label for a person from dueList. Shared so the dashboard and the
+// follow-ups page describe the same person the same way.
+export function dueBadge(p) {
+  switch (p._reason) {
+    case "scheduled":
+      return `Scheduled · ${p._scheduled.toLocaleDateString([], { month: "short", day: "numeric" })}`;
+    case "new":
+      return p._daysOverdue === 0 ? "First follow-up due" : `First follow-up · ${p._daysOverdue}d overdue`;
+    case "inactive":
+      return `${p._since}d without contact`;
+    default:
+      return p._daysOverdue === 0 ? "Due today" : `${p._daysOverdue}d overdue`;
+  }
+}
+
+export function countDue(people, profile) {
+  return dueList(people, profile).length;
 }

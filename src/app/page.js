@@ -5,55 +5,13 @@ import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPeopleByAssignee, getTeamPeopleAndNoContact, getNoContactByAssignee, getMeetupsByAssignee, countCompletedMeetups } from "@/lib/firestore";
 import { useFollowUpLog } from "@/hooks/useFollowUpLog";
+import { dueList, dueBadge } from "@/lib/followUps";
 import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import Spinner from "@/components/Spinner";
 import FollowUpCard from "@/components/FollowUpCard";
 import { useSidebar } from "@/context/SidebarContext";
 import { FiClipboard, FiCalendar, FiBell } from "react-icons/fi";
-import { DEFAULT_FOLLOW_UP_DAYS, DEFAULT_INACTIVITY_DAYS } from "@/config/app";
-
-function getRefDate(p) {
-  if (p.lastFollowedUpAt?.toDate) return p.lastFollowedUpAt.toDate();
-  if (p.createdAt?.toDate) return p.createdAt.toDate();
-  if (p.createdAt) return new Date(p.createdAt);
-  return null;
-}
-
-function daysSince(date) {
-  return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function getScheduledDate(p) {
-  if (!p.scheduledFollowUpAt) return null;
-  return p.scheduledFollowUpAt.toDate ? p.scheduledFollowUpAt.toDate() : new Date(p.scheduledFollowUpAt);
-}
-
-function getOverduePeople(people, followUpDays, inactivityDays) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return people
-    .filter((p) => {
-      if (p.noContact) return false;
-      const scheduled = getScheduledDate(p);
-      if (scheduled && scheduled <= today) return true;
-      const ref = getRefDate(p);
-      if (!ref) return false;
-      const since = daysSince(ref);
-      const interval = p.followUpDays ?? followUpDays;
-      const createdAt = p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : null);
-      const sinceCreated = createdAt ? daysSince(createdAt) : null;
-      const isType1 = !p.lastFollowedUpAt && sinceCreated !== null && sinceCreated >= interval;
-      const isType2 = since >= inactivityDays;
-      return isType1 || isType2;
-    })
-    .sort((a, b) => {
-      const refA = getRefDate(a), refB = getRefDate(b);
-      const sinceA = refA ? daysSince(refA) : 0;
-      const sinceB = refB ? daysSince(refB) : 0;
-      return sinceB - sinceA;
-    });
-}
 
 const PERIODS = ["Daily", "Weekly", "All Time"];
 
@@ -180,9 +138,9 @@ export default function Dashboard() {
 
   const myTalkedTo = statsLoading ? null : countTalkedTo(myPeople, myNoContact, period);
   const teamTalkedTo = statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period);
-  const followUpDays = profile?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
-  const inactivityDays = profile?.inactivityCheckDays ?? DEFAULT_INACTIVITY_DAYS;
-  const overduePeople = statsLoading ? [] : getOverduePeople(myPeople, followUpDays, inactivityDays);
+  // Same rules as /follow-ups and the nav badge — one classifier, so the three
+  // can never disagree about who is due.
+  const overduePeople = statsLoading ? [] : dueList(myPeople, profile);
   const overdueCount = overduePeople.length;
 
   const myMetrics = [
@@ -303,27 +261,16 @@ export default function Dashboard() {
                   </button>
                 </div>
                 <div className="space-y-2">
-                  {overduePeople.slice(0, 3).map((p) => {
-                    const ref = getRefDate(p);
-                    const scheduled = getScheduledDate(p);
-                    const today = new Date(); today.setHours(0,0,0,0);
-                    const isScheduledDue = scheduled && scheduled <= today;
-                    const interval = p.followUpDays ?? followUpDays;
-                    const days = ref ? daysSince(ref) - interval : 0;
-                    const badge = isScheduledDue
-                      ? `Scheduled · ${scheduled.toLocaleDateString([], { month: "short", day: "numeric" })}`
-                      : days === 0 ? "Due today" : `${days}d overdue`;
-                    return (
-                      <FollowUpCard
-                        key={p.id}
-                        person={p}
-                        badge={badge}
-                        badgeColor="text-rose-500"
-                        onNavigate={() => router.push(`/person/${p.id}`)}
-                        {...cardProps(p)}
-                      />
-                    );
-                  })}
+                  {overduePeople.slice(0, 3).map((p) => (
+                    <FollowUpCard
+                      key={p.id}
+                      person={p}
+                      badge={dueBadge(p)}
+                      badgeColor="text-rose-500"
+                      onNavigate={() => router.push(`/person/${p.id}`)}
+                      {...cardProps(p)}
+                    />
+                  ))}
                 </div>
               </div>
             )}
