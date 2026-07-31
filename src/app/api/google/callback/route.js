@@ -1,4 +1,4 @@
-import { oauthClient } from "@/lib/google/oauth";
+import { oauthClient, emailFromIdToken } from "@/lib/google/oauth";
 import { verifyState } from "@/lib/google/state";
 import { saveTokens } from "@/lib/google/tokens";
 import { requireEnv } from "@/lib/google/env";
@@ -35,6 +35,9 @@ export async function GET(request) {
     await saveTokens(uid, {
       refreshToken: tokens.refresh_token,
       calendarId: "primary",
+      // Shown in settings so a user with several Google logins can see which
+      // account they actually authorised.
+      googleEmail: emailFromIdToken(tokens.id_token),
       connectedAt: Date.now(),
       // A fresh grant clears any earlier "reconnect me" state.
       needsReconnect: false,

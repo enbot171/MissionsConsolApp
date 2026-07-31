@@ -88,7 +88,22 @@ function GoogleCalendarCard() {
         </>
       ) : status?.connected ? (
         <>
-          <p className="text-xs font-semibold text-emerald-600">Connected</p>
+          <div className="flex items-start gap-2 rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5">
+            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-emerald-700">Connected</p>
+              {status.googleEmail ? (
+                <p className="text-xs text-emerald-800 truncate">{status.googleEmail}</p>
+              ) : (
+                <p className="text-xs text-emerald-800">
+                  Reconnect to show which account this is
+                </p>
+              )}
+              <p className="text-[11px] text-emerald-700/70 mt-0.5">
+                Meetings sync to this account&apos;s calendar
+              </p>
+            </div>
+          </div>
           <p className="text-[11px] text-gray-400">
             Google requires re-connecting about once a week while the app is unverified.
           </p>

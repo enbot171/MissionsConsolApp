@@ -15,6 +15,7 @@ export async function POST(request) {
     const tokens = await loadTokens(uid);
     return Response.json({
       connected: !!tokens?.refreshToken,
+      googleEmail: tokens?.googleEmail || null,
       connectedAt: tokens?.connectedAt || null,
       channelExpiry: tokens?.channelExpiry || null,
       needsReconnect: !!tokens?.needsReconnect,

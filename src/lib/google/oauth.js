@@ -2,6 +2,11 @@ import { google } from "googleapis";
 import { requireEnv } from "@/lib/google/env";
 
 export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+// Which Google account is connected. `calendar.events` cannot read calendar
+// metadata (403), and asking for a broader calendar scope to learn an address
+// would be disproportionate — these two are non-sensitive and add nothing to
+// the verification burden.
+export const IDENTITY_SCOPES = ["openid", "https://www.googleapis.com/auth/userinfo.email"];
 
 export function oauthClient() {
   return new google.auth.OAuth2(
@@ -17,7 +22,20 @@ export function authUrl(state) {
     // refresh token; without prompt:consent a returning user gets none.
     access_type: "offline",
     prompt: "consent",
-    scope: [CALENDAR_SCOPE],
+    scope: [CALENDAR_SCOPE, ...IDENTITY_SCOPES],
     state,
   });
+}
+
+// The id_token comes straight from Google's token endpoint over TLS, not from
+// the browser, so reading the claim without verifying the signature is safe
+// here. Returns null rather than throwing — an unknown address is a cosmetic
+// loss, and must never cost someone their connection.
+export function emailFromIdToken(idToken) {
+  try {
+    const payload = String(idToken).split(".")[1];
+    return JSON.parse(Buffer.from(payload, "base64url").toString()).email || null;
+  } catch {
+    return null;
+  }
 }
