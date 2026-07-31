@@ -1,8 +1,7 @@
 import { google } from "googleapis";
 import { adminDb } from "@/lib/firebaseAdmin";
-import { authedClientFor, isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
-import { meetupToEvent } from "@/lib/google/eventMapping";
-import { ensureAppCalendar } from "@/lib/google/calendar";
+import { authedSession, isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
+import { ensureAppCalendar, upsertMeetupEvent } from "@/lib/google/calendar";
 
 // While a grant is dead every meetup edit still saves locally but never reaches
 // Google, and the echo guard rightly refuses to let Google's stale copy win. So
@@ -11,11 +10,11 @@ import { ensureAppCalendar } from "@/lib/google/calendar";
 const MAX_MEETUPS = 50;
 
 export async function resyncUpcoming(uid) {
-  const client = await authedClientFor(uid);
-  if (!client) return { ok: false, reason: "not_connected" };
+  const session = await authedSession(uid);
+  if (!session) return { ok: false, reason: "not_connected" };
 
-  const calendar = google.calendar({ version: "v3", auth: client });
-  const calendarId = await ensureAppCalendar(uid, client);
+  const calendar = google.calendar({ version: "v3", auth: session.client });
+  const calendarId = await ensureAppCalendar(uid, session.client, session.tokens);
   const db = adminDb();
 
   // Only future meetings are repaired. Past ones are history — recreating them
@@ -33,21 +32,7 @@ export async function resyncUpcoming(uid) {
   for (const doc of snap.docs) {
     const meetup = { id: doc.id, ...doc.data() };
     try {
-      const body = meetupToEvent(meetup);
-      let eventId = meetup.googleEventId;
-
-      if (eventId) {
-        await calendar.events.patch({ calendarId, eventId, requestBody: body })
-          .catch(async (e) => {
-            // 404/410: deleted in Google while we were disconnected. Recreate.
-            if (![404, 410].includes(e?.code)) throw e;
-            const created = await calendar.events.insert({ calendarId, requestBody: body });
-            eventId = created.data.id;
-          });
-      } else {
-        const created = await calendar.events.insert({ calendarId, requestBody: body });
-        eventId = created.data.id;
-      }
+      const eventId = await upsertMeetupEvent(calendar, calendarId, meetup);
 
       await doc.ref.set({ googleEventId: eventId, syncedAt: Date.now() }, { merge: true });
       synced++;

@@ -28,17 +28,26 @@ export async function markNeedsReconnect(uid) {
   // credential — a token string that no longer works is worse than none,
   // because everything downstream reads its presence as "connected".
   await adminDb().collection(COLLECTION).doc(uid).set(
-    { refreshToken: null, needsReconnect: true, disconnectedAt: Date.now() },
+    { refreshToken: null, needsReconnect: true },
     { merge: true }
   );
 }
 
 // Every connected user gets their own client — tokens are per-person, so a
 // module-level singleton would leak one user's calendar into another's request.
-export async function authedClientFor(uid) {
-  const stored = await loadTokens(uid);
-  if (!stored?.refreshToken) return null;
+//
+// Returns the loaded document alongside the client. Callers almost always need
+// both, and without this they each re-read googleTokens/{uid} — which doubled
+// the reads on the two hottest paths, every webhook delivery and every save.
+export async function authedSession(uid) {
+  const tokens = await loadTokens(uid);
+  if (!tokens?.refreshToken) return null;
   const client = oauthClient();
-  client.setCredentials({ refresh_token: stored.refreshToken });
-  return client;
+  client.setCredentials({ refresh_token: tokens.refreshToken });
+  return { client, tokens };
+}
+
+export async function authedClientFor(uid) {
+  const session = await authedSession(uid);
+  return session?.client ?? null;
 }

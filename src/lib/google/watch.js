@@ -1,14 +1,14 @@
 import crypto from "node:crypto";
 import { google } from "googleapis";
-import { authedClientFor, loadTokens, saveTokens } from "@/lib/google/tokens";
+import { authedSession, saveTokens } from "@/lib/google/tokens";
 import { requireEnv } from "@/lib/google/env";
 import { ensureAppCalendar } from "@/lib/google/calendar";
 
 export async function openChannel(uid) {
-  const client = await authedClientFor(uid);
-  if (!client) return;
-  const calendar = google.calendar({ version: "v3", auth: client });
-  const calendarId = await ensureAppCalendar(uid, client);
+  const session = await authedSession(uid);
+  if (!session) return;
+  const calendar = google.calendar({ version: "v3", auth: session.client });
+  const calendarId = await ensureAppCalendar(uid, session.client, session.tokens);
 
   // Google gives no way to renew a channel — you replace it with a new id.
   const id = crypto.randomUUID();
@@ -30,12 +30,12 @@ export async function openChannel(uid) {
 }
 
 export async function stopChannel(uid) {
-  const stored = await loadTokens(uid);
+  const session = await authedSession(uid);
+  if (!session) return;
+  const stored = session.tokens;
   if (!stored?.channelId || !stored?.resourceId) return;
-  const client = await authedClientFor(uid);
-  if (!client) return;
 
-  await google.calendar({ version: "v3", auth: client }).channels
+  await google.calendar({ version: "v3", auth: session.client }).channels
     .stop({ requestBody: { id: stored.channelId, resourceId: stored.resourceId } })
     .catch(() => {});
 

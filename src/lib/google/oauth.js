@@ -5,12 +5,12 @@ import { requireEnv } from "@/lib/google/env";
 // cannot see or touch the user's existing calendars at all — so a bug in this
 // app can never delete someone's real appointment, and inbound sync never reads
 // their personal schedule.
-export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
+const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
 // Which Google account is connected. `calendar.events` cannot read calendar
 // metadata (403), and asking for a broader calendar scope to learn an address
 // would be disproportionate — these two are non-sensitive and add nothing to
 // the verification burden.
-export const IDENTITY_SCOPES = ["openid", "https://www.googleapis.com/auth/userinfo.email"];
+const IDENTITY_SCOPES = ["openid", "https://www.googleapis.com/auth/userinfo.email"];
 
 export function oauthClient() {
   return new google.auth.OAuth2(

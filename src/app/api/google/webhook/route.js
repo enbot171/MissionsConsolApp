@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 import { google } from "googleapis";
 import { adminDb } from "@/lib/firebaseAdmin";
-import { authedClientFor, loadTokens, saveTokens, isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
+import { authedSession, saveTokens, isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
 import { eventToMeetupPatch, shouldApplyRemote } from "@/lib/google/eventMapping";
+import { storedCalendarId } from "@/lib/google/calendar";
 import { requireEnv } from "@/lib/google/env";
 import { Timestamp } from "firebase-admin/firestore";
 
@@ -38,15 +39,14 @@ export async function POST(request) {
 }
 
 async function pullChanges(uid) {
-  const client = await authedClientFor(uid);
-  if (!client) return;
-  const calendar = google.calendar({ version: "v3", auth: client });
-  const stored = await loadTokens(uid);
+  const session = await authedSession(uid);
+  if (!session) return;
+  const calendar = google.calendar({ version: "v3", auth: session.client });
+  const stored = session.tokens;
 
   // Only ever read the app's own calendar. No provisioned calendar means there
   // is nothing of ours to sync — never fall back to the user's primary one.
-  const calendarId =
-    stored?.calendarId && stored.calendarId !== "primary" ? stored.calendarId : null;
+  const calendarId = storedCalendarId(stored);
   if (!calendarId) return;
 
   let params = stored?.syncToken

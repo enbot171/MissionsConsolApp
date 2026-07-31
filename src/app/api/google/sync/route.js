@@ -1,37 +1,27 @@
 import { google } from "googleapis";
-import { getAuth } from "firebase-admin/auth";
 import { adminDb } from "@/lib/firebaseAdmin";
-import { authedClientFor, isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
-import { meetupToEvent } from "@/lib/google/eventMapping";
-import { ensureAppCalendar } from "@/lib/google/calendar";
+import { requireUid } from "@/lib/google/requireUid";
+import { authedSession, isDeadGrant, markNeedsReconnect } from "@/lib/google/tokens";
+import { ensureAppCalendar, upsertMeetupEvent } from "@/lib/google/calendar";
 
 export const runtime = "nodejs";
 
 export async function POST(request) {
-  const header = request.headers.get("authorization") || "";
-  const idToken = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!idToken) return Response.json({ error: "Missing ID token" }, { status: 401 });
-
-  let uid;
-  try {
-    adminDb();
-    ({ uid } = await getAuth().verifyIdToken(idToken));
-  } catch {
-    return Response.json({ error: "Invalid ID token" }, { status: 401 });
-  }
+  const { uid, response } = await requireUid(request);
+  if (response) return response;
 
   const { meetupId, action } = await request.json();
   if (!meetupId || !["upsert", "delete"].includes(action)) {
     return Response.json({ error: "Bad request" }, { status: 400 });
   }
 
-  const client = await authedClientFor(uid);
   // Not being connected is the normal case, not an error — the app must work
   // fully without Google.
-  if (!client) return Response.json({ ok: false, reason: "not_connected" });
+  const session = await authedSession(uid);
+  if (!session) return Response.json({ ok: false, reason: "not_connected" });
 
-  const calendar = google.calendar({ version: "v3", auth: client });
-  const calendarId = await ensureAppCalendar(uid, client);
+  const calendar = google.calendar({ version: "v3", auth: session.client });
+  const calendarId = await ensureAppCalendar(uid, session.client, session.tokens);
   const ref = adminDb().collection("meetups").doc(meetupId);
   const snap = await ref.get();
 
@@ -62,22 +52,9 @@ export async function POST(request) {
   const meetup = { id: snap.id, ...snap.data() };
   if (meetup.assignedTo !== uid) return Response.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = meetupToEvent(meetup);
-  let eventId = meetup.googleEventId;
-
+  let eventId;
   try {
-    if (eventId) {
-      await calendar.events.patch({ calendarId, eventId, requestBody: body })
-        .catch(async (e) => {
-          if (![404, 410].includes(e?.code)) throw e;
-          // The event was deleted in Google; recreate rather than dropping the link.
-          const created = await calendar.events.insert({ calendarId, requestBody: body });
-          eventId = created.data.id;
-        });
-    } else {
-      const created = await calendar.events.insert({ calendarId, requestBody: body });
-      eventId = created.data.id;
-    }
+    eventId = await upsertMeetupEvent(calendar, calendarId, meetup);
   } catch (e) {
     if (!isDeadGrant(e)) throw e;
     await markNeedsReconnect(uid);
