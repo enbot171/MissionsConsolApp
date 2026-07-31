@@ -4,13 +4,7 @@ import { useState, useCallback } from "react";
 import { updatePerson } from "@/lib/firestore";
 import { serverTimestamp, Timestamp } from "firebase/firestore";
 import { useFollowUpCount } from "@/context/FollowUpCountContext";
-
-export function toDateInput(ts) {
-  if (!ts) return "";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+import { toDateInput } from "@/lib/dates";
 
 function draftFromPerson(p) {
   return {
@@ -25,7 +19,7 @@ function draftFromPerson(p) {
  * `patchPerson(id, patch)` lets each page update its own copy of the list.
  */
 export function useFollowUpLog(patchPerson) {
-  const { refresh } = useFollowUpCount();
+  const { applyPatch } = useFollowUpCount();
   const [acting, setActing] = useState({});
   const [openId, setOpenId] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -49,10 +43,11 @@ export function useFollowUpLog(patchPerson) {
       lastFollowedUpAt: serverTimestamp(),
       ...(person.scheduledFollowUpAt ? { scheduledFollowUpAt: null } : {}),
     });
-    patchPerson(person.id, { lastFollowedUpAt: { toDate: () => new Date() }, scheduledFollowUpAt: null });
+    const patch = { lastFollowedUpAt: { toDate: () => new Date() }, scheduledFollowUpAt: null };
+    patchPerson(person.id, patch);
+    applyPatch(person.id, patch);
     clearAct(person.id);
-    refresh();
-  }, [patchPerson, setAct, clearAct, refresh]);
+  }, [patchPerson, setAct, clearAct, applyPatch]);
 
   // Writes only the follow-up fields — never the whole person doc, so a stale
   // draft can't clobber edits made on the person page.
@@ -70,17 +65,18 @@ export function useFollowUpLog(patchPerson) {
       ...(alsoCheck ? { lastFollowedUpAt: serverTimestamp() } : {}),
     });
 
-    patchPerson(person.id, {
+    const patch = {
       followUpRemarks: d.followUpRemarks,
       followUpDays: days,
       scheduledFollowUpAt: nextDate,
       ...(alsoCheck ? { lastFollowedUpAt: { toDate: () => new Date() } } : {}),
-    });
+    };
+    patchPerson(person.id, patch);
+    applyPatch(person.id, patch);
 
     clearAct(person.id);
     if (alsoCheck) { setOpenId(null); setDraft(null); }
-    refresh();
-  }, [patchPerson, setAct, clearAct, refresh]);
+  }, [patchPerson, setAct, clearAct, applyPatch]);
 
   // Props every FollowUpCard needs to support the inline panel.
   const cardProps = useCallback((person) => ({
@@ -93,5 +89,7 @@ export function useFollowUpLog(patchPerson) {
     onCheck: check,
   }), [acting, openId, draft, toggleLog, saveLog, check]);
 
-  return { acting, setAct, clearAct, openId, draft, setDraft, toggleLog, check, saveLog, cardProps };
+  // Only what callers actually use: cardProps drives the cards, and the
+  // follow-ups page needs setAct/clearAct for its own archive action.
+  return { setAct, clearAct, saveLog, cardProps };
 }

@@ -17,6 +17,7 @@ import {
 import { serverTimestamp } from "firebase/firestore";
 import { callApi } from "@/lib/google/client";
 import PageShell from "@/components/PageShell";
+import { toLocalDateStr, toDatetimeLocal, formatTime } from "@/lib/dates";
 import { FiChevronLeft, FiChevronRight, FiPlus, FiX, FiTrash2, FiEdit3 } from "react-icons/fi";
 
 // Google is best-effort: a sync failure must never block the meetup itself.
@@ -29,25 +30,6 @@ const CONFIRM_WINDOW_DAYS = 120;
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-
-function toLocalDateStr(ts) {
-  if (!ts) return null;
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toISOString().split("T")[0];
-}
-
-function toDatetimeLocal(ts) {
-  if (!ts) return "";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function formatMeetupTime(ts) {
-  if (!ts) return "";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
 
 function QueryParamHandler({ setForm, setSearch, setModal }) {
   const router = useRouter();
@@ -384,7 +366,7 @@ export default function CalendarPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">{m.personName}</p>
                         <p className="text-xs text-gray-400">
-                          {d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {formatMeetupTime(m.date)}
+                          {d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {formatTime(m.date)}
                           {m.location ? ` · ${m.location}` : ""}
                         </p>
                       </div>
@@ -518,7 +500,7 @@ export default function CalendarPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{m.personName}</p>
                       <p className="text-xs text-gray-400">
-                        {d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {formatMeetupTime(m.date)}
+                        {d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {formatTime(m.date)}
                         {m.location ? ` · ${m.location}` : ""}
                       </p>
                     </div>
@@ -551,12 +533,12 @@ export default function CalendarPage() {
                   className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
                 >
                   <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-bold text-blue-600">{formatMeetupTime(m.date).split(" ")[0]}</span>
+                    <span className="text-xs font-bold text-blue-600">{formatTime(m.date).split(" ")[0]}</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{m.personName}</p>
                     <p className="text-xs text-gray-400 truncate">
-                      {formatMeetupTime(m.date)}{m.location ? ` · ${m.location}` : ""}
+                      {formatTime(m.date)}{m.location ? ` · ${m.location}` : ""}
                     </p>
                     {m.outcomeNotes && (
                       <p className="mt-1 pl-2 border-l-2 border-emerald-400 text-xs text-gray-600 italic line-clamp-2">
