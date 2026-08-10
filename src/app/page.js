@@ -129,14 +129,19 @@ export default function Dashboard() {
 
   if (loading) return <Spinner fullScreen />;
 
-  const myStats = statsLoading ? null : computeStats(myPeople, period, myNoContact);
+  // getPeopleByAssignee keeps no-contact people; the team query drops them and
+  // adds them back via teamNoContact. Match that here, or every no-contact person
+  // is counted twice on the "My" side and mine reads higher than the team's.
+  const myActive = myPeople.filter((p) => !p.noContact);
+
+  const myStats = statsLoading ? null : computeStats(myActive, period, myNoContact);
   const teamStats = statsLoading ? null : computeStats(teamPeople, period, teamNoContact);
 
-  const myDisciples = statsLoading ? null : myPeople.filter((p) => (p.roles || []).includes("Disciple")).length;
+  const myDisciples = statsLoading ? null : myActive.filter((p) => (p.roles || []).includes("Disciple")).length;
   const teamDisciples = statsLoading ? null : teamPeople.filter((p) => (p.roles || []).includes("Disciple")).length;
   const teamCoreTeam = statsLoading ? null : teamPeople.filter((p) => (p.roles || []).includes("Core Team")).length;
 
-  const myTalkedTo = statsLoading ? null : countTalkedTo(myPeople, myNoContact, period);
+  const myTalkedTo = statsLoading ? null : countTalkedTo(myActive, myNoContact, period);
   const teamTalkedTo = statsLoading ? null : countTalkedTo(teamPeople, teamNoContact, period);
   // Same rules as /follow-ups and the nav badge — one classifier, so the three
   // can never disagree about who is due.
