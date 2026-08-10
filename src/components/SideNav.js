@@ -3,7 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { FaHome, FaPlus, FaUsers, FaLayerGroup } from "react-icons/fa";
 import { HiMenu } from "react-icons/hi";
-import { FiChevronLeft, FiChevronRight, FiClipboard, FiCalendar, FiBell, FiClock } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiClipboard, FiCalendar, FiBell, FiClock, FiFileText, FiZap } from "react-icons/fi";
 import { useSidebar } from "@/context/SidebarContext";
 
 const tabs = [
@@ -14,6 +14,8 @@ const tabs = [
   { path: "/calendar",   icon: FiCalendar,  label: "Calendar"   },
   { path: "/meetings",   icon: FiClock,     label: "Meetings"   },
   { path: "/follow-ups", icon: FiBell,     label: "Follow-ups" },
+  { path: "/report",     icon: FiFileText, label: "Weekly Report" },
+  { path: "/testimonies", icon: FiZap,    label: "Testimonies" },
   { path: "/settings",   icon: HiMenu,     label: "Settings"   },
 ];
 

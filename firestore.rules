@@ -51,6 +51,10 @@ service cloud.firestore {
       allow read, write: if isAuth();
     }
 
+    match /testimonies/{testimonyId} {
+      allow read, write: if isAuth();
+    }
+
     // Google refresh tokens. Denied to every client; the Admin SDK bypasses
     // rules entirely, so only server route handlers can reach these.
     match /googleTokens/{uid} {

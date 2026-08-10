@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { FaHome, FaPlus, FaUsers, FaLayerGroup } from "react-icons/fa";
-import { FiBell, FiClock, FiCalendar, FiClipboard, FiMoreHorizontal, FiSettings } from "react-icons/fi";
+import { FiBell, FiClock, FiCalendar, FiClipboard, FiFileText, FiZap, FiMoreHorizontal, FiSettings } from "react-icons/fi";
 import { useFollowUpCount } from "@/context/FollowUpCountContext";
 
 // The five slots go to what gets touched daily. Everything else is reference
@@ -20,6 +20,8 @@ const moreItems = [
   { path: "/groups",     icon: FaLayerGroup, label: "Groups" },
   { path: "/calendar",   icon: FiCalendar,   label: "Calendar" },
   { path: "/summary",    icon: FiClipboard,  label: "Summary" },
+  { path: "/report",     icon: FiFileText,  label: "Weekly Report" },
+  { path: "/testimonies", icon: FiZap,      label: "Testimonies" },
   { path: "/settings",   icon: FiSettings,   label: "Settings" },
 ];
 

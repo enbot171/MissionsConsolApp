@@ -192,6 +192,11 @@ export default function CalendarPage() {
       outcomeNotes: meetup.outcomeNotes || "",
       alsoFollowUp: true,
       newDate: "",
+      // What came of the meeting, as counts rather than prose — the weekly
+      // report's Connection Time section has no other source for these.
+      metPrayed: !!meetup.metPrayed,
+      metGospel: !!meetup.metGospel,
+      metSaved: !!meetup.metSaved,
     });
 
   const patchMeetup = (id, patch) => {
@@ -201,13 +206,20 @@ export default function CalendarPage() {
 
   const handleHappened = async (meetup) => {
     setSaving(true);
-    await updateMeetup(meetup.id, { completed: true, outcomeNotes: outcome.outcomeNotes });
+    const record = {
+      completed: true,
+      outcomeNotes: outcome.outcomeNotes,
+      metPrayed: outcome.metPrayed,
+      metGospel: outcome.metGospel,
+      metSaved: outcome.metSaved,
+    };
+    await updateMeetup(meetup.id, record);
     if (outcome.alsoFollowUp && meetup.personId) {
       // Meeting someone IS following them up — otherwise they stay "overdue"
       // on the follow-ups page right after you saw them.
       await updatePerson(meetup.personId, { lastFollowedUpAt: serverTimestamp() });
     }
-    patchMeetup(meetup.id, { completed: true, outcomeNotes: outcome.outcomeNotes });
+    patchMeetup(meetup.id, record);
     setOutcome(null);
     setSaving(false);
   };
@@ -409,6 +421,23 @@ export default function CalendarPage() {
                           placeholder="What you talked about, prayer points, next steps…"
                           className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 resize-none"
                         />
+                        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                          {[
+                            ["metPrayed", "Prayed for them"],
+                            ["metGospel", "Shared the gospel"],
+                            ["metSaved", "Received salvation"],
+                          ].map(([key, label]) => (
+                            <label key={key} className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={outcome[key]}
+                                onChange={(e) => setOutcome((o) => ({ ...o, [key]: e.target.checked }))}
+                                className="w-4 h-4 accent-emerald-600"
+                              />
+                              <span className="text-xs text-gray-700 font-medium">{label}</span>
+                            </label>
+                          ))}
+                        </div>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input
                             type="checkbox"

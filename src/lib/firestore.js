@@ -389,6 +389,56 @@ export const deleteMeetup = async (id) => {
   await deleteDoc(doc(db, "meetups", id));
 };
 
+// Whole-team meetups inside a window — the weekly report needs everyone's, not
+// just the signed-in user's. Always bounded; the report only ever asks for a week.
+export const getMeetupsByTeam = async (teamId, { since, until } = {}) => {
+  const q = query(
+    collection(db, "meetups"),
+    where("teamId", "==", teamId),
+    ...(since ? [where("date", ">=", Timestamp.fromDate(since))] : []),
+    ...(until ? [where("date", "<", Timestamp.fromDate(until))] : []),
+    orderBy("date", "asc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
+// ── Testimonies ───────────────────────────────────────────────────────────────
+// Free-standing records: a testimony can name a person or nobody at all, so it
+// lives in its own collection rather than as a field on `people`.
+
+export const addTestimony = async (data) => {
+  const ref = await addDoc(collection(db, "testimonies"), {
+    ...data,
+    date: Timestamp.fromDate(new Date(data.date)),
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+};
+
+export const getTestimoniesByTeam = async (teamId, { since, until } = {}) => {
+  const q = query(
+    collection(db, "testimonies"),
+    where("teamId", "==", teamId),
+    ...(since ? [where("date", ">=", Timestamp.fromDate(since))] : []),
+    ...(until ? [where("date", "<", Timestamp.fromDate(until))] : []),
+    orderBy("date", "desc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
+export const updateTestimony = async (id, data) => {
+  await updateDoc(doc(db, "testimonies", id), {
+    ...data,
+    ...(data.date ? { date: Timestamp.fromDate(new Date(data.date)) } : {}),
+  });
+};
+
+export const deleteTestimony = async (id) => {
+  await deleteDoc(doc(db, "testimonies", id));
+};
+
 export const getPeopleByAssigneeForMonth = async (uid, year, month) => {
   const start = new Date(year, month, 1);
   const end = new Date(year, month + 1, 1);
