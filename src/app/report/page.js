@@ -429,8 +429,9 @@ function ReadGrid({ row }) {
   );
 }
 
-// Whole numbers up to 999; an emptied box counts as 0.
-const typedNumber = (text) => Number(text.replace(/\D/g, "").slice(0, 3) || 0);
+// Whole numbers up to 9999; an emptied box counts as 0. Commas and spaces are
+// dropped, so pasting "1,200" gives 1200.
+const typedNumber = (text) => Number(text.replace(/\D/g, "").slice(0, 4) || 0);
 
 const CELL_INPUT = "h-full w-full min-w-0 rounded-none bg-transparent p-0 text-center text-base outline-none focus:shadow-[inset_0_0_0_2px_var(--color-brand)] md:text-[15px]";
 

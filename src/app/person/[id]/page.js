@@ -223,7 +223,9 @@ export default function PersonView() {
         </div>
       }
       bottomBar={
-        <Button size="lg" className="flex-1" onClick={handleSave} disabled={saving} aria-busy={saving}>{saveLabel}</Button>
+        <Button size="lg" className="flex-1" onClick={handleSave} disabled={saving || !dirty} aria-busy={saving}>
+          {dirty || saving ? saveLabel : "Saved"}
+        </Button>
       }
     >
       {/* Phone only: the two quick actions under the heading. The negative margin
