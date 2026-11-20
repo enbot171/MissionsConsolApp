@@ -1,15 +1,17 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { FiHome, FiPlus, FiUsers, FiLayers, FiHeart, FiChevronLeft, FiChevronRight, FiClipboard, FiCalendar, FiBell, FiClock, FiFileText, FiZap, FiSliders } from "react-icons/fi";
+import { FiHome, FiPlus, FiUsers, FiLayers, FiHeart, FiChevronLeft, FiChevronRight, FiClipboard, FiCalendar, FiBell, FiClock, FiFileText, FiZap, FiSliders, FiStar } from "react-icons/fi";
 import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { useFollowUpCount } from "@/context/FollowUpCountContext";
+import { confirmLeave } from "@/hooks/useLeaveGuard";
 
 const tabs = [
   { path: "/",            icon: FiHome,       label: "Home" },
   { path: "/people",      icon: FiUsers,      label: "People" },
   { path: "/groups",      icon: FiLayers,     label: "Groups" },
+  { path: "/events",      icon: FiStar,       label: "Events" },
   { path: "/summary",     icon: FiClipboard,  label: "Summary" },
   { path: "/calendar",    icon: FiCalendar,   label: "Calendar" },
   { path: "/meetings",    icon: FiClock,      label: "Meetings" },
@@ -29,6 +31,8 @@ export default function SideNav() {
 
   const name = profile?.name || "Account";
   const badgeText = count > 99 ? "99+" : count;
+  // A page with unsaved edits gets to ask before the menu takes you away.
+  const go = (path) => { if (confirmLeave()) router.push(path); };
 
   return (
     <aside
@@ -53,7 +57,7 @@ export default function SideNav() {
 
       <button
         type="button"
-        onClick={() => router.push("/add-contact")}
+        onClick={() => go("/add-contact")}
         aria-label={collapsed ? "Add contact" : undefined}
         title={collapsed ? "Add contact" : undefined}
         className="flex h-11 w-full items-center justify-center gap-2 rounded-[14px] bg-white font-semibold text-navy transition-colors hover:bg-brand-soft"
@@ -70,7 +74,7 @@ export default function SideNav() {
             <button
               key={path}
               type="button"
-              onClick={() => router.push(path)}
+              onClick={() => go(path)}
               aria-current={active ? "page" : undefined}
               aria-label={collapsed ? label : undefined}
               title={collapsed ? label : undefined}
@@ -98,7 +102,7 @@ export default function SideNav() {
 
       <button
         type="button"
-        onClick={() => router.push("/settings")}
+        onClick={() => go("/settings")}
         aria-label={collapsed ? `${name}, settings` : undefined}
         title={collapsed ? name : undefined}
         className={`flex items-center gap-2.5 rounded-2xl bg-white/[0.08] text-left transition-colors hover:bg-white/[0.13] ${

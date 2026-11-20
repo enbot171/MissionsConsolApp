@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildWeeklyReport, reportToCsv, weekStart, DAY_LABELS,
-  applyOverrides, mergeOverrides, overrideKey,
+  applyOverrides, mergeOverrides, overrideKey, signOverrideKey, progressOverrideKey,
 } from "@/lib/report";
 
 // Mon 2026-08-03 .. Sun 2026-08-09
@@ -128,7 +128,7 @@ describe("buildWeeklyReport — progress snapshot", () => {
     const report = buildWeeklyReport({ members: MEMBERS, people, cgs: [{ id: "cg1" }], start: START });
     expect(report.progress).toMatchObject({
       Contacts: 1, Converts: 1, Disciples: 1, Encounter: 1,
-      "Water Baptism": 1, "Connect Group": 1, "No. in CGs": 1, "No. in Service": 1,
+      "Water Baptism": 1, "Connect Group": 1, "No. in CGs": 1, "No. in Service": 0,
     });
   });
 });
@@ -258,5 +258,85 @@ describe("report overrides", () => {
       expect(existing).toEqual({ "talkedTo|u1|0": 5 });
       expect(changes).toEqual({ "talkedTo|u1|0": 2 });
     });
+  });
+});
+
+describe("signs & wonders overrides", () => {
+  const testimonies = [
+    { date: at(2), signWonder: true, category: "Physical Healing" },
+    { date: at(2), signWonder: true, category: "Physical Healing" },
+    { date: at(4), signWonder: true, category: "Emotional Healing" },
+  ];
+  const build = () => buildWeeklyReport({ members: MEMBERS, testimonies, start: START });
+  const sign = (report, type) => report.signs.find((r) => r.key === type);
+
+  it("builds keys as sign:<type>|team|day", () => {
+    expect(signOverrideKey("Physical Healing", 2)).toBe("sign:Physical Healing|team|2");
+  });
+
+  it("replaces one cell and moves the type total by the difference", () => {
+    const out = applyOverrides(build(), { [signOverrideKey("Physical Healing", 2)]: 5 });
+    expect(sign(out, "Physical Healing").days[2]).toBe(5);
+    expect(sign(out, "Physical Healing").total).toBe(5);
+    expect(sign(out, "Emotional Healing").total).toBe(1);
+  });
+
+  it("does not change the counted report", () => {
+    const counted = build();
+    applyOverrides(counted, { [signOverrideKey("Physical Healing", 2)]: 5 });
+    expect(sign(counted, "Physical Healing").days[2]).toBe(2);
+    expect(sign(counted, "Physical Healing").total).toBe(2);
+  });
+
+  it("ignores a type that is not on the form and a key without the team owner", () => {
+    const out = applyOverrides(build(), { "sign:Unknown|team|0": 4, "sign:Physical Healing|u1|0": 4 });
+    expect(out.signs).toEqual(build().signs);
+  });
+
+  it("leaves sections A and B alone", () => {
+    const out = applyOverrides(build(), { [signOverrideKey("Physical Healing", 0)]: 9 });
+    expect(out.evangelism).toEqual(build().evangelism);
+    expect(out.connection).toEqual(build().connection);
+  });
+
+  it("stores a changed cell and drops one typed back to the counted number", () => {
+    const key = signOverrideKey("Physical Healing", 2);
+    expect(mergeOverrides(build(), {}, { [key]: 5 })).toEqual({ [key]: 5 });
+    expect(mergeOverrides(build(), { [key]: 5 }, { [key]: 2 })).toEqual({});
+  });
+});
+
+describe("progress of work overrides", () => {
+  const people = [
+    { assignedTo: "u1", createdAt: at(0), roles: ["Contact"] },
+    { assignedTo: "u1", createdAt: at(0), roles: ["Contact", "Disciple"] },
+  ];
+  const build = () => buildWeeklyReport({ members: MEMBERS, people, start: START });
+
+  it("builds keys as progress:<label>|team|0", () => {
+    expect(progressOverrideKey("No. in CGs")).toBe("progress:No. in CGs|team|0");
+  });
+
+  it("replaces one number and leaves the others", () => {
+    const out = applyOverrides(build(), { [progressOverrideKey("Contacts")]: 9 });
+    expect(out.progress.Contacts).toBe(9);
+    expect(out.progress.Disciples).toBe(1);
+  });
+
+  it("does not change the counted report", () => {
+    const counted = build();
+    applyOverrides(counted, { [progressOverrideKey("Contacts")]: 9 });
+    expect(counted.progress.Contacts).toBe(2);
+  });
+
+  it("ignores a label that is not on the form", () => {
+    const out = applyOverrides(build(), { "progress:Unknown|team|0": 4, "progress:toString|team|0": 4 });
+    expect(out.progress).toEqual(build().progress);
+  });
+
+  it("stores a changed number and drops one typed back to the counted number", () => {
+    const key = progressOverrideKey("Contacts");
+    expect(mergeOverrides(build(), {}, { [key]: 9 })).toEqual({ [key]: 9 });
+    expect(mergeOverrides(build(), { [key]: 9 }, { [key]: 2 })).toEqual({});
   });
 });

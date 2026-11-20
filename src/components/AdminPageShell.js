@@ -15,11 +15,11 @@ function AdminSideNav() {
 
   return (
     <aside className="fixed bottom-0 left-0 top-0 z-50 hidden w-60 flex-col gap-4 bg-navy px-3.5 pb-3.5 pt-5 text-white md:flex">
-      <div className="flex items-center gap-2.5 px-1.5">
+      <div className="flex items-center gap-2.5 px-0.5">
         <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-brand-light text-navy">
           <FiHeart size={17} strokeWidth={2.2} />
         </span>
-        <p className="min-w-0 flex-1 truncate font-bold tracking-[-0.015em]">Missions Consol App</p>
+        <p className="min-w-0 flex-1 truncate text-[15px] font-bold tracking-[-0.02em]">Missions Consol App</p>
       </div>
 
       <nav aria-label="Admin" className="flex flex-1 flex-col gap-0.5">

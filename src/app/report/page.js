@@ -2,17 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
+import { useLeaveGuard } from "@/hooks/useLeaveGuard";
 import {
   getUsersByTeam, getTeamPeopleAndNoContact, getMeetupsByTeam,
   getTestimoniesByTeam, getCGsByTeam, getTeam,
-  getReportOverrides, saveReportOverrides,
+  getReportOverrides, saveReportOverrides, getServiceAttendance,
 } from "@/lib/firestore";
 import PageShell from "@/components/PageShell";
 import Spinner from "@/components/Spinner";
 import { Banner, Button } from "@/components/ui";
 import {
   buildWeeklyReport, reportToCsv, weekStart, weekEnd, DAY_LABELS,
-  applyOverrides, mergeOverrides, overrideKey,
+  applyOverrides, mergeOverrides, overrideKey, signOverrideKey, progressOverrideKey,
 } from "@/lib/report";
 import { toDateInput } from "@/lib/dates";
 import { FiDownload, FiChevronLeft, FiChevronRight, FiEdit2, FiUsers } from "react-icons/fi";
@@ -32,6 +33,7 @@ const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satu
 // Column tracks for the three grids, phone first then laptop.
 const READ_COLS = "grid grid-cols-[78px_repeat(7,minmax(0,1fr))_36px] md:grid-cols-[minmax(88px,1.5fr)_repeat(7,minmax(30px,1fr))_minmax(40px,1.1fr)]";
 const EDIT_COLS = "grid grid-cols-[72px_repeat(7,minmax(0,1fr))_36px] md:grid-cols-[minmax(96px,1.5fr)_repeat(7,minmax(34px,1fr))_minmax(44px,1.1fr)]";
+const SIGN_EDIT_COLS = "grid grid-cols-[104px_repeat(7,minmax(0,1fr))_36px] md:grid-cols-[minmax(200px,2.4fr)_repeat(7,minmax(36px,1fr))_minmax(48px,1.1fr)]";
 const SIGN_COLS = "grid grid-cols-[minmax(200px,2.4fr)_repeat(7,minmax(36px,1fr))_minmax(48px,1.1fr)]";
 
 const countClass = (value) => (value ? "font-semibold text-ink" : "text-muted");
@@ -44,6 +46,7 @@ export default function Report() {
   const [counted, setCounted] = useState(null);
   const [cells, setCells] = useState({});
   const [overridesFailed, setOverridesFailed] = useState(false);
+  const [serviceFailed, setServiceFailed] = useState(false);
   const [teamName, setTeamName] = useState("");
   const [fetching, setFetching] = useState(true);
 
@@ -76,8 +79,18 @@ export default function Report() {
       .then((found) => ({ found, failed: false }))
       .catch(() => ({ found: {}, failed: true }));
 
-    Promise.all([report, overrides]).then(([[members, roster, meetups, testimonies, cgs, team], { found, failed }]) => {
+    // Also on its own: this read needs an index, and while that is missing or
+    // still building the rest of the report must not go blank.
+    const service = getServiceAttendance(teamId, toDateInput(start), toDateInput(until))
+      .then((records) => ({ records, failed: false }))
+      .catch((err) => {
+        console.error("Weekly report: Sunday service attendance did not load", err);
+        return { records: [], failed: true };
+      });
+
+    Promise.all([report, overrides, service]).then(([[members, roster, meetups, testimonies, cgs, team], { found, failed }, svc]) => {
       if (!current) return;
+      setServiceFailed(svc.failed);
       setTeamName(team?.name || "");
       setCells(found);
       setOverridesFailed(failed);
@@ -88,6 +101,7 @@ export default function Report() {
         meetups,
         testimonies,
         cgs,
+        serviceAttendance: svc.records,
         start,
       }));
     }).finally(() => { if (current) setFetching(false); });
@@ -112,13 +126,8 @@ export default function Report() {
     });
   };
 
-  // Closing or reloading the tab with unsaved numbers asks first.
-  useEffect(() => {
-    if (changed === 0) return;
-    const warn = (e) => { e.preventDefault(); e.returnValue = ""; };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [changed]);
+  // Leaving with unsaved numbers asks first (menus, closing the tab).
+  useLeaveGuard(changed > 0, "You have unsaved numbers. Leave without saving?");
 
   const startEditing = () => { setDraft({}); setSaveError(""); setEditing(true); };
 
@@ -238,6 +247,9 @@ export default function Report() {
       {overridesFailed && !fetching && (
         <Banner tone="error" className="mb-4">Saved edits could not be loaded, so these are the counted numbers. Editing is off for now.</Banner>
       )}
+      {serviceFailed && !fetching && (
+        <Banner tone="warning" className="mb-4">Sunday service attendance could not be loaded, so “No. in Service” shows 0 unless it was typed in by hand.</Banner>
+      )}
       {saveError && <Banner tone="error" className="mb-4">{saveError}</Banner>}
 
       {fetching ? (
@@ -258,8 +270,14 @@ export default function Report() {
           <section className="flex flex-col gap-2 md:gap-2.5">
             <SectionHeading>C. Signs &amp; wonders</SectionHeading>
 
+            {editing && (
+              <div className="rounded-[20px] bg-tint px-3 py-3 md:rounded-3xl md:bg-white md:px-[18px] md:py-4 md:shadow-card">
+                <SignsEditGrid rows={shown.signs} savedRows={saved.signs} onCell={setCell} />
+              </div>
+            )}
+
             {/* Laptop: one table in a card. */}
-            <div className="hidden rounded-3xl bg-white px-[18px] py-4 shadow-card md:block">
+            <div className={`hidden rounded-3xl bg-white px-[18px] py-4 shadow-card ${editing ? "" : "md:block"}`}>
               <div className="overflow-x-auto">
                 <div role="table" aria-label="Signs and wonders" className="flex min-w-[560px] flex-col gap-0.5 text-sm">
                   <div role="row" className={`${SIGN_COLS} h-[26px] items-center px-2 text-center text-[12.5px] font-semibold text-muted`}>
@@ -279,7 +297,7 @@ export default function Report() {
             </div>
 
             {/* Phone: a panel per type, the week as seven tiles. */}
-            {shown.signs.map((row) => (
+            {!editing && shown.signs.map((row) => (
               <div key={row.key} className="flex flex-col gap-1.5 rounded-[20px] bg-tint px-3.5 py-3 md:hidden">
                 <div className="flex items-center justify-between gap-2.5">
                   <h3 className="text-sm font-bold">{row.label}</h3>
@@ -299,11 +317,32 @@ export default function Report() {
 
           <section className="flex flex-col gap-2 md:gap-2.5">
             <SectionHeading>D. Progress of work</SectionHeading>
+            {editing && (
+              <p className="-mt-1 text-[13px] text-muted">
+                Changes here apply to this week&apos;s report only. To go back to the app&apos;s count, type it in again.
+              </p>
+            )}
             <dl className="grid grid-cols-2 gap-2 md:grid-cols-[repeat(auto-fit,minmax(108px,1fr))] md:gap-2.5">
               {Object.entries(shown.progress).map(([label, value]) => (
                 <div key={label} className="flex flex-col-reverse justify-end rounded-2xl bg-brand-soft px-3.5 py-2.5 md:rounded-[18px] md:px-4 md:py-3.5">
-                  <dt className="text-[13px] text-ink-2 md:mt-1">{label}</dt>
-                  <dd className="text-[22px] font-bold leading-[1.15] tracking-[-0.03em] text-navy tabular-nums md:text-[28px] md:leading-[1.1]">{value}</dd>
+                  <dt className="text-[13px] text-ink-2 md:mt-1">
+                    {label}
+                    {/* What the app counts from its own records, so an edit is made knowingly. */}
+                    {editing && <span className="block text-xs text-muted tabular-nums">App counts {counted.progress[label]}</span>}
+                  </dt>
+                  <dd className="text-[22px] font-bold leading-[1.15] tracking-[-0.03em] text-navy tabular-nums md:text-[28px] md:leading-[1.1]">
+                    {editing ? (
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        aria-label={label}
+                        value={value}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setCell(progressOverrideKey(label), typedNumber(e.target.value), saved.progress[label])}
+                        className="h-10 w-full min-w-0 rounded-[10px] bg-white px-2 font-bold tracking-[-0.03em] outline-none ring-1 ring-line focus:ring-2 focus:ring-brand"
+                      />
+                    ) : value}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -390,6 +429,45 @@ function ReadGrid({ row }) {
   );
 }
 
+// Whole numbers up to 999; an emptied box counts as 0.
+const typedNumber = (text) => Number(text.replace(/\D/g, "").slice(0, 3) || 0);
+
+const CELL_INPUT = "h-full w-full min-w-0 rounded-none bg-transparent p-0 text-center text-base outline-none focus:shadow-[inset_0_0_0_2px_var(--color-brand)] md:text-[15px]";
+
+// Section C as a sheet: one row per type, a number box per day.
+function SignsEditGrid({ rows, savedRows, onCell }) {
+  return (
+    <div className="overflow-x-auto rounded-[14px] bg-white ring-1 ring-line">
+      <div role="table" aria-label="Signs and wonders, editable" className="min-w-[300px] text-[13px] tabular-nums md:min-w-[400px] md:text-sm">
+        <div role="row" className={`${SIGN_EDIT_COLS} h-[30px] items-center border-b border-line bg-tint text-center text-[12.5px] font-bold text-muted md:h-[34px]`}>
+          <span role="columnheader" className="px-2 text-left md:px-2.5">Type</span>
+          <DayHeads />
+          <span role="columnheader">Total</span>
+        </div>
+        {rows.map((row, ri) => (
+          <div key={row.key} role="row" className={`${SIGN_EDIT_COLS} h-[42px] border-b border-line-soft last:border-b-0 md:h-11`}>
+            <span role="rowheader" className="min-w-0 truncate border-r border-line px-2 leading-[42px] text-ink-2 md:px-2.5 md:leading-[44px]">{row.label}</span>
+            {row.days.map((v, day) => (
+              <span key={day} role="cell" className="flex min-w-0 border-r border-line-soft">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  aria-label={`${row.key}, ${DAY_NAMES[day]}`}
+                  value={v}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => onCell(signOverrideKey(row.key, day), typedNumber(e.target.value), savedRows[ri].days[day])}
+                  className={`${CELL_INPUT} ${countClass(v)}`}
+                />
+              </span>
+            ))}
+            <span role="cell" className="flex items-center justify-center bg-tint font-bold">{row.total}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // The same grid as a sheet: every member/day cell is a plain number box.
 function EditGrid({ row, savedRow, onCell }) {
   return (
@@ -413,12 +491,8 @@ function EditGrid({ row, savedRow, onCell }) {
                     aria-label={`${m.name}, ${DAY_NAMES[day]}`}
                     value={v}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => {
-                      // Whole numbers up to 999; an emptied box counts as 0.
-                      const digits = e.target.value.replace(/\D/g, "").slice(0, 3);
-                      onCell(key, Number(digits || 0), savedRow.members[mi].days[day]);
-                    }}
-                    className={`h-full w-full min-w-0 rounded-none bg-transparent p-0 text-center text-base outline-none focus:shadow-[inset_0_0_0_2px_var(--color-brand)] md:text-[15px] ${countClass(v)}`}
+                    onChange={(e) => onCell(key, typedNumber(e.target.value), savedRow.members[mi].days[day])}
+                    className={`${CELL_INPUT} ${countClass(v)}`}
                   />
                 </span>
               );

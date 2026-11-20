@@ -6,12 +6,14 @@ import BottomNav from "./BottomNav";
 import SideNav from "./SideNav";
 import { BottomBar } from "./ui";
 import { useSidebar } from "@/context/SidebarContext";
+import { confirmLeave } from "@/hooks/useLeaveGuard";
 
 // The text back link that sits above a page heading.
 export function BackLink({ href, label = "Back" }) {
   return (
     <Link
       href={href}
+      onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}
       className="-mt-2 mb-1 inline-flex min-h-11 items-center gap-1.5 font-semibold text-brand hover:text-navy"
     >
       <FiChevronLeft size={18} aria-hidden="true" />

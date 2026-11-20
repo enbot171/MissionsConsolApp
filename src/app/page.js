@@ -9,9 +9,10 @@ import { useFollowUpLog } from "@/hooks/useFollowUpLog";
 import { dueList, dueBadge } from "@/lib/followUps";
 import PageShell from "@/components/PageShell";
 import Spinner from "@/components/Spinner";
+import FollowUpCard from "@/components/FollowUpCard";
 import SearchBar from "@/components/SearchBar";
-import { Avatar, Button } from "@/components/ui";
-import { FiCheck, FiChevronRight, FiClipboard } from "react-icons/fi";
+import { Button } from "@/components/ui";
+import { FiChevronRight, FiClipboard } from "react-icons/fi";
 
 const PERIODS = ["Daily", "Weekly", "All Time"];
 const PERIOD_LABELS = { "All Time": "All time" };
@@ -91,7 +92,6 @@ function StatGrid({ metrics, tone, loading }) {
 // "See all" keeps a 44px hit area; on laptop the negative margin stops it
 // stretching the heading row.
 const linkClass = "inline-flex min-h-11 items-center text-sm font-semibold text-brand hover:text-navy md:-my-2.5";
-const spinnerClass = "h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent";
 const countClass = "inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-brand px-2 text-[13px] font-bold text-white";
 
 function dateLine() {
@@ -367,41 +367,22 @@ export default function Dashboard() {
                   See all
                 </button>
               </div>
-              {/* The board lists two on the phone and five on the laptop. */}
-              {overduePeople.slice(0, 5).map((p, i) => {
-                const { acting, onCheck } = cardProps(p);
-                const late = p._daysOverdue > 0;
-                const checkText = p._reason === "inactive" ? "still active" : "followed up";
-                return (
-                  <div key={p.id} className={`min-h-16 items-center gap-3 md:min-h-[68px] ${i < 2 ? "flex" : "hidden md:flex"}`}>
-                    <Avatar name={p.name} />
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/person/${p.id}`)}
-                      className="min-w-0 flex-1 self-stretch text-left"
-                    >
-                      <span className="block truncate text-base font-semibold tracking-[-0.01em] text-ink md:text-[15px] md:tracking-normal">
-                        {p.name}
-                      </span>
-                      <span className={`block truncate text-[13px] font-medium ${late ? "text-warn-ink" : "text-ink"}`}>
-                        {dueBadge(p)}
-                        {p.followUpDays ? ` · every ${p.followUpDays} days` : ""}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onCheck(p)}
-                      disabled={!!acting}
-                      aria-label={`Mark ${p.name} ${checkText}`}
-                      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand transition-colors hover:bg-role-contact disabled:cursor-not-allowed disabled:opacity-50 md:bg-white md:ring-1 md:ring-navy/10 md:hover:bg-tint"
-                    >
-                      {acting === "checking"
-                        ? <span className={spinnerClass} />
-                        : <FiCheck size={18} strokeWidth={2.4} aria-hidden="true" />}
-                    </button>
+              {/* Two on the phone, five on the laptop. The shared card brings the
+                  tick and the Log panel (remarks, next date) with it. */}
+              <div className="mt-1.5 flex flex-col gap-2">
+                {overduePeople.slice(0, 5).map((p, i) => (
+                  <div key={p.id} className={i < 2 ? "" : "hidden md:block"}>
+                    <FollowUpCard
+                      person={p}
+                      badge={dueBadge(p)}
+                      badgeColor={p._daysOverdue > 0 ? "text-warn-ink" : "text-ink"}
+                      onNavigate={() => router.push(`/person/${p.id}`)}
+                      checkLabel={p._reason === "inactive" ? "Mark as still active" : undefined}
+                      {...cardProps(p)}
+                    />
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </section>
           )}
         </div>

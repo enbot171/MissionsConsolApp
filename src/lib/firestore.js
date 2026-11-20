@@ -1,5 +1,6 @@
 import {
   runTransaction,
+  writeBatch,
   collection,
   doc,
   setDoc,
@@ -17,6 +18,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { attendanceId, mergeAttendance } from "./events";
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 
@@ -490,4 +492,154 @@ export const saveReportOverrides = async (teamId, weekStart, merge, uid) => {
     tx.set(ref, { teamId, weekStart, cells, updatedBy: uid, updatedAt: serverTimestamp() });
     return cells;
   });
+};
+
+// ── Events and their attendance ───────────────────────────────────────────────
+//
+// `events` holds one document per event; a weekly event is still one document.
+// `eventAttendance` holds one document per event per date, with the fixed id
+// `${eventId}_${dateStr}`, so saving the same date twice updates one record.
+// Dates are local "YYYY-MM-DD" strings (toDateInput), never toISOString.
+
+const BATCH_LIMIT = 500;
+
+const eventFields = (data) => ({
+  name: data.name.trim(),
+  isService: !!data.isService,
+  recurrence: data.recurrence === "weekly" ? "weekly" : "none",
+  dateStr: data.dateStr,
+  time: data.time || "",
+  location: (data.location || "").trim(),
+});
+
+export const createEvent = async (teamId, data, uid) => {
+  const ref = await addDoc(collection(db, "events"), {
+    ...eventFields(data),
+    teamId,
+    endedOn: null,
+    createdBy: uid,
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+};
+
+export const getEvent = async (id) => {
+  const snap = await getDoc(doc(db, "events", id));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+};
+
+export const getEventsByTeam = async (teamId) => {
+  const snap = await getDocs(query(collection(db, "events"), where("teamId", "==", teamId)));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
+const attendanceDocs = async (...filters) => {
+  const snap = await getDocs(query(collection(db, "eventAttendance"), ...filters));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
+const newestFirst = (records) => records.sort((a, b) => (a.dateStr < b.dateStr ? 1 : a.dateStr > b.dateStr ? -1 : 0));
+
+export const getAttendanceByEvent = async (eventId) =>
+  newestFirst(await attendanceDocs(where("eventId", "==", eventId)));
+
+export const getAttendanceByTeam = async (teamId) =>
+  newestFirst(await attendanceDocs(where("teamId", "==", teamId)));
+
+// Every event one person was ticked at, newest first. Sorted here rather than
+// in the query so it needs no composite index.
+export const getEventsAttendedBy = async (personId) =>
+  newestFirst(await attendanceDocs(where("present", "array-contains", personId)));
+
+// Sunday-service records with fromStr <= dateStr < toStr, for the weekly report.
+export const getServiceAttendance = async (teamId, fromStr, toStr) =>
+  attendanceDocs(
+    where("teamId", "==", teamId),
+    where("isService", "==", true),
+    where("dateStr", ">=", fromStr),
+    where("dateStr", "<", toStr),
+  );
+
+export const getEventAttendance = async (eventId, dateStr) => {
+  const snap = await getDoc(doc(db, "eventAttendance", attendanceId(eventId, dateStr)));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+};
+
+// Thrown by saveEventAttendance when the event was deleted in the meantime.
+export const EVENT_GONE = "event-deleted";
+
+// Saves inside a transaction: re-reads the record as it is now and applies only
+// what this person changed (see mergeAttendance), so two people marking the
+// same service keep each other's ticks. The event is re-read too, so the copied
+// name and "Sunday service" switch are current, and a save cannot recreate a
+// record for an event someone has just deleted. Returns the saved record.
+export const saveEventAttendance = async (event, dateStr, changes, uid) => {
+  const eventRef = doc(db, "events", event.id);
+  const ref = doc(db, "eventAttendance", attendanceId(event.id, dateStr));
+  return runTransaction(db, async (tx) => {
+    const [eventSnap, snap] = await Promise.all([tx.get(eventRef), tx.get(ref)]);
+    if (!eventSnap.exists()) throw new Error(EVENT_GONE);
+    const current = eventSnap.data();
+    const merged = mergeAttendance(snap.exists() ? snap.data() : null, changes);
+    const record = {
+      eventId: event.id,
+      teamId: current.teamId,
+      dateStr,
+      isService: !!current.isService,
+      eventName: current.name,
+      ...merged,
+    };
+    tx.set(ref, { ...record, updatedBy: uid, updatedAt: serverTimestamp() });
+    return { id: ref.id, ...record };
+  });
+};
+
+// Runs `apply(batch, ref)` over the refs in groups Firestore accepts.
+const inBatches = async (refs, apply) => {
+  for (let i = 0; i < refs.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(db);
+    refs.slice(i, i + BATCH_LIMIT).forEach((ref) => apply(batch, ref));
+    await batch.commit();
+  }
+};
+
+const attendanceRefs = async (eventId) => {
+  const snap = await getDocs(query(collection(db, "eventAttendance"), where("eventId", "==", eventId)));
+  return snap.docs.map((d) => d.ref);
+};
+
+// The name and the "Sunday service" switch are copied onto every attendance
+// record, so changing either rewrites those copies. The copies go first and the
+// event last: if anything fails halfway, the event still has its old values,
+// so saving the edit again (even after a reload) redoes the copies.
+export const updateEvent = async (event, data) => {
+  const fields = eventFields(data);
+  if (fields.name !== event.name || fields.isService !== !!event.isService) {
+    await inBatches(await attendanceRefs(event.id), (batch, ref) =>
+      batch.update(ref, { eventName: fields.name, isService: fields.isService }));
+  }
+  await updateDoc(doc(db, "events", event.id), fields);
+  return { ...event, ...fields };
+};
+
+// Stops a weekly event after `endedOn` (which itself still counts). Everything
+// already recorded is kept.
+export const stopEvent = async (id, endedOn) => {
+  await updateDoc(doc(db, "events", id), { endedOn });
+};
+
+export const resumeEvent = async (id) => {
+  await updateDoc(doc(db, "events", id), { endedOn: null });
+};
+
+export const countEventAttendance = async (eventId) => {
+  const snap = await getCountFromServer(query(collection(db, "eventAttendance"), where("eventId", "==", eventId)));
+  return snap.data().count;
+};
+
+// Attendance first, the event last: if this fails halfway the event is still
+// there and deleting it again finishes the job.
+export const deleteEvent = async (id) => {
+  await inBatches(await attendanceRefs(id), (batch, ref) => batch.delete(ref));
+  await deleteDoc(doc(db, "events", id));
 };

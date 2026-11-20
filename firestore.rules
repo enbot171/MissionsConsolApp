@@ -60,6 +60,15 @@ service cloud.firestore {
       allow read, write: if isAuth();
     }
 
+    // Team events (Sunday service, gatherings, one-offs) and who came to each.
+    match /events/{eventId} {
+      allow read, write: if isAuth();
+    }
+
+    match /eventAttendance/{docId} {
+      allow read, write: if isAuth();
+    }
+
     // Google refresh tokens. Denied to every client; the Admin SDK bypasses
     // rules entirely, so only server route handlers can reach these.
     match /googleTokens/{uid} {

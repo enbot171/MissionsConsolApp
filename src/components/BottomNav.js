@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { FiHome, FiPlus, FiUsers, FiLayers, FiBell, FiClock, FiCalendar, FiClipboard, FiFileText, FiZap, FiMoreHorizontal, FiSettings } from "react-icons/fi";
+import { FiHome, FiPlus, FiUsers, FiLayers, FiBell, FiClock, FiCalendar, FiClipboard, FiFileText, FiZap, FiMoreHorizontal, FiSettings, FiStar } from "react-icons/fi";
 import { useFollowUpCount } from "@/context/FollowUpCountContext";
+import { confirmLeave } from "@/hooks/useLeaveGuard";
 
 // The five slots go to what gets touched daily. Everything else is reference
 // material and lives one tap deeper, behind More.
@@ -17,6 +18,7 @@ const tabs = [
 const moreItems = [
   { path: "/follow-ups", icon: FiBell,       label: "Follow-ups", badge: true },
   { path: "/groups",     icon: FiLayers, label: "Groups" },
+  { path: "/events",     icon: FiStar,   label: "Events" },
   { path: "/calendar",   icon: FiCalendar,   label: "Calendar" },
   { path: "/summary",    icon: FiClipboard,  label: "Summary" },
   { path: "/report",     icon: FiFileText,  label: "Weekly report" },
@@ -33,7 +35,8 @@ export default function BottomNav() {
   const isActive = (path) => path === "/" ? pathname === "/" : pathname.startsWith(path);
   const moreActive = moreItems.some((i) => isActive(i.path));
 
-  const go = (path) => { setSheet(false); router.push(path); };
+  // A page with unsaved edits gets to ask before the menu takes you away.
+  const go = (path) => { if (!confirmLeave()) return; setSheet(false); router.push(path); };
 
   const badgeText = count > 99 ? "99+" : count;
   const tabClass = (active) =>
@@ -92,7 +95,7 @@ export default function BottomNav() {
               <button
                 key={path}
                 type="button"
-                onClick={() => router.push(path)}
+                onClick={() => go(path)}
                 aria-label="Add contact"
                 className="flex h-13 w-13 shrink-0 items-center justify-center rounded-[18px] bg-brand text-white shadow-brand transition-transform active:scale-95"
               >
@@ -105,7 +108,7 @@ export default function BottomNav() {
             <button
               key={path}
               type="button"
-              onClick={() => router.push(path)}
+              onClick={() => go(path)}
               aria-current={active ? "page" : undefined}
               className={tabClass(active)}
             >

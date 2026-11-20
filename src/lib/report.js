@@ -1,3 +1,5 @@
+import { serviceCount } from "./events";
+
 export const DAY_LABELS = ["Mon", "Tues", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export const SIGN_WONDER_TYPES = ["Physical Healing", "Emotional Healing", "Restored Relationships"];
@@ -101,7 +103,7 @@ const ARRANGED_METRIC = [
  *    booked, and counts regardless of whether it happened.
  *  - Connection Time counts only meet-ups confirmed as happened (`completed`).
  */
-export function buildWeeklyReport({ members = [], people = [], noContact = [], meetups = [], testimonies = [], cgs = [], start }) {
+export function buildWeeklyReport({ members = [], people = [], noContact = [], meetups = [], testimonies = [], cgs = [], serviceAttendance = [], start }) {
   const everyone = [...people, ...noContact];
 
   const peopleRecords = everyone.map((p) => ({ uid: p.assignedTo, when: p.createdAt, doc: p }));
@@ -142,7 +144,10 @@ export function buildWeeklyReport({ members = [], people = [], noContact = [], m
     "Water Baptism": people.filter((p) => milestone(p, "Water Baptism")).length,
     "Connect Group": cgs.length,
     "No. in CGs": people.filter((p) => p.cgId).length,
-    "No. in Service": people.filter((p) => hasRole(p, "Core Team")).length,
+    // People ticked plus walk-ins at this week's Sunday service (see events.js).
+    // 0 until a team sets a service up; the tile can still be typed over by
+    // hand. It used to show the Core Team count, which is a different thing.
+    "No. in Service": serviceCount(serviceAttendance),
   };
 
   return { start, evangelism, connection, signs, progress, members };
@@ -150,11 +155,21 @@ export function buildWeeklyReport({ members = [], people = [], noContact = [], m
 
 // ── Manual overrides ──────────────────────────────────────────────────────────
 //
-// A team can type its own number into any member/day cell of sections A and B.
-// Those numbers are stored apart from the records the report counts, as a flat
-// map of "metric|uid|day" → number, and laid over the counted report here.
+// A team can type its own number into any member/day cell of sections A and B,
+// and any type/day cell of section C. Those numbers are stored apart from the
+// records the report counts, as a flat map of "metric|uid|day" → number, and
+// laid over the counted report here. Section C has no member split, so its keys
+// use "sign:<type>" as the metric and "team" in place of the uid. Section D is
+// one number per label, stored the same way as "progress:<label>|team|0".
 
 export const overrideKey = (metricKey, uid, day) => `${metricKey}|${uid}|${day}`;
+
+const SIGN_PREFIX = "sign:";
+const SIGN_OWNER = "team";
+export const signOverrideKey = (type, day) => overrideKey(`${SIGN_PREFIX}${type}`, SIGN_OWNER, day);
+
+const PROGRESS_PREFIX = "progress:";
+export const progressOverrideKey = (label) => overrideKey(`${PROGRESS_PREFIX}${label}`, SIGN_OWNER, 0);
 
 const OVERRIDE_SECTIONS = ["evangelism", "connection"];
 
@@ -165,16 +180,43 @@ function parseKey(key) {
   return { metricKey, uid, day };
 }
 
-// The cell a key points at in a report, or null when the metric or the member
-// is not in it (a member who has left the team has no row any more).
+// The cell a key points at in a report: the holder it sits in (`days`), where
+// in the holder (`day`: a day index, or for section D the label), and
+// `addToTotals(diff)` to move every total that includes it. Null
+// when the metric, the member or the type is not in the report (a member who
+// has left the team has no row any more).
 function findCell(report, key) {
   const parsed = parseKey(key);
   if (!parsed) return null;
+  const { metricKey, uid, day } = parsed;
+
+  if (metricKey.startsWith(SIGN_PREFIX)) {
+    if (uid !== SIGN_OWNER) return null;
+    const row = (report.signs || []).find((r) => r.key === metricKey.slice(SIGN_PREFIX.length));
+    return row ? { days: row.days, day, addToTotals: (diff) => { row.total += diff; } } : null;
+  }
+
+  if (metricKey.startsWith(PROGRESS_PREFIX)) {
+    const label = metricKey.slice(PROGRESS_PREFIX.length);
+    if (uid !== SIGN_OWNER || day !== 0 || !Object.hasOwn(report.progress || {}, label)) return null;
+    // A single number with no totals above it.
+    return { days: report.progress, day: label, addToTotals: () => {} };
+  }
+
   for (const section of OVERRIDE_SECTIONS) {
-    const row = (report[section] || []).find((r) => r.key === parsed.metricKey);
+    const row = (report[section] || []).find((r) => r.key === metricKey);
     if (!row) continue;
-    const member = row.members.find((m) => m.uid === parsed.uid);
-    return member ? { row, member, day: parsed.day } : null;
+    const member = row.members.find((m) => m.uid === uid);
+    if (!member) return null;
+    return {
+      days: member.days,
+      day,
+      addToTotals: (diff) => {
+        member.total += diff;
+        row.totals[day] += diff;
+        row.total += diff;
+      },
+    };
   }
   return null;
 }
@@ -195,16 +237,15 @@ export function applyOverrides(report, cells) {
       totals: [...row.totals],
     }));
   });
+  out.signs = (report.signs || []).map((row) => ({ ...row, days: [...row.days] }));
+  out.progress = { ...(report.progress || {}) };
 
   Object.entries(cells || {}).forEach(([key, value]) => {
     const cell = findCell(out, key);
     if (!cell || !Number.isFinite(value)) return;
-    const { row, member, day } = cell;
-    const diff = value - member.days[day];
-    member.days[day] = value;
-    member.total += diff;
-    row.totals[day] += diff;
-    row.total += diff;
+    const diff = value - cell.days[cell.day];
+    cell.days[cell.day] = value;
+    cell.addToTotals(diff);
   });
 
   return out;
@@ -222,7 +263,7 @@ export function mergeOverrides(countedReport, existingCells, changes) {
   const next = { ...(existingCells || {}) };
   Object.entries(changes || {}).forEach(([key, value]) => {
     const cell = findCell(countedReport, key);
-    if (cell && cell.member.days[cell.day] === value) delete next[key];
+    if (cell && cell.days[cell.day] === value) delete next[key];
     else next[key] = value;
   });
   return next;

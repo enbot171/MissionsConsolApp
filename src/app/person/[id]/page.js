@@ -3,7 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { getPerson, updatePerson, getCGsByTeam, getUsersByTeam, getCoreTeamsByTeam, getMeetupsByPerson } from "@/lib/firestore";
+import { confirmLeave, useLeaveGuard } from "@/hooks/useLeaveGuard";
+import { getPerson, updatePerson, getCGsByTeam, getUsersByTeam, getCoreTeamsByTeam, getMeetupsByPerson, getEventsAttendedBy } from "@/lib/firestore";
+import { formatEventDay } from "@/lib/events";
+import Link from "next/link";
 import { Timestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
 import Spinner from "@/components/Spinner";
@@ -22,6 +25,9 @@ export default function PersonView() {
   const [users, setUsers] = useState([]);
   const [coreTeams, setCoreTeams] = useState([]);
   const [meetups, setMeetups] = useState([]);
+  // Events this person was ticked at, newest first. Null while unknown or if the read failed.
+  const [attended, setAttended] = useState(null);
+  const [showAllAttended, setShowAllAttended] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -46,20 +52,16 @@ export default function PersonView() {
       setFetching(false);
     });
     getMeetupsByPerson(id).then(setMeetups).catch(() => setMeetups([]));
+    getEventsAttendedBy(id).then(setAttended).catch(() => setAttended(null));
   }, [id, profile?.teamId]);
 
   const set = useCallback((k, v) => setForm((f) => ({ ...f, [k]: v })), []);
 
-  // Closing or reloading the tab with unsaved edits asks first.
+  // Leaving with unsaved edits asks first (menus, back link, closing the tab).
   const hasUnsaved = Boolean(
     person && form && Object.keys(form).some((k) => JSON.stringify(form[k]) !== JSON.stringify(person[k]))
   );
-  useEffect(() => {
-    if (!hasUnsaved) return;
-    const warn = (e) => { e.preventDefault(); e.returnValue = ""; };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [hasUnsaved]);
+  useLeaveGuard(hasUnsaved);
 
   const showSaved = () => {
     setSaved(true);
@@ -161,7 +163,7 @@ export default function PersonView() {
   const archiveLabel = person.archived ? "Unarchive" : "Archive";
   const onArchive = person.archived ? handleUnarchive : handleArchive;
   const saveLabel = saving ? "Saving…" : "Save changes";
-  const scheduleMeeting = () => router.push(`/calendar?scheduleFor=${id}&name=${encodeURIComponent(person.name)}`);
+  const scheduleMeeting = () => confirmLeave() && router.push(`/calendar?scheduleFor=${id}&name=${encodeURIComponent(person.name)}`);
 
   // Heading subline: how to reach them, then when and where they were met.
   const now = new Date();
@@ -366,7 +368,7 @@ export default function PersonView() {
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => router.push(`/calendar?editMeetup=${m.id}`)}
+                    onClick={() => confirmLeave() && router.push(`/calendar?editMeetup=${m.id}`)}
                     className="-mx-2 flex min-h-15 items-center gap-3 rounded-2xl px-2 text-left transition-colors hover:bg-tint"
                   >
                     <span
@@ -399,6 +401,39 @@ export default function PersonView() {
               })
             )}
           </Card>
+
+          {attended && attended.length > 0 && (
+            <Card className="order-2 flex flex-col gap-1 pb-2 md:order-none md:px-[22px] md:pb-3">
+              <div className="flex items-center justify-between gap-2.5">
+                <SectionTitle>Events attended <span className="font-medium text-muted">{attended.length}</span></SectionTitle>
+                <span className="text-[13px] text-muted">Newest first</span>
+              </div>
+              {(showAllAttended ? attended : attended.slice(0, 5)).map((rec) => (
+                <Link
+                  key={rec.id}
+                  href={`/events/${rec.eventId}?date=${rec.dateStr}`}
+                  onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}
+                  className="-mx-2 flex min-h-[52px] items-center gap-3 rounded-2xl px-2 text-ink transition-colors hover:bg-tint"
+                >
+                  <span aria-hidden="true" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                    <FiCheck size={17} strokeWidth={2.4} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-semibold">{rec.eventName}</span>
+                  <span className="shrink-0 text-sm text-muted">{formatEventDay(rec.dateStr)}</span>
+                </Link>
+              ))}
+              {attended.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllAttended((v) => !v)}
+                  aria-expanded={showAllAttended}
+                  className="inline-flex min-h-11 items-center self-start font-semibold text-brand hover:text-navy"
+                >
+                  {showAllAttended ? "Show fewer" : `Show all ${attended.length}`}
+                </button>
+              )}
+            </Card>
+          )}
         </div>
 
         <div className="contents md:flex md:min-w-0 md:flex-[1_1_300px] md:flex-col md:gap-4">

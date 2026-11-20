@@ -193,6 +193,24 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "eventAttendance",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "teamId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isService",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateStr",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
