@@ -75,11 +75,13 @@ body {
     background-size: 6px 6px;
     background-repeat: no-repeat;
   }
-}
 
-:focus-visible {
-  outline: 2px solid var(--color-brand);
-  outline-offset: 2px;
+  /* Default focus ring. In the base layer so a field that draws its own ring
+     (`outline-none` plus a ring or inset shadow) does not get this one too. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
 }
 
 /* Sideways-scrolling chip rows hide their scrollbar. */
