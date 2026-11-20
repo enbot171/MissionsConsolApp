@@ -4,14 +4,14 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { confirmLeave, useLeaveGuard } from "@/hooks/useLeaveGuard";
-import { getPerson, updatePerson, getCGsByTeam, getUsersByTeam, getCoreTeamsByTeam, getMeetupsByPerson, getEventsAttendedBy } from "@/lib/firestore";
-import { formatEventDay } from "@/lib/events";
+import { getPerson, updatePerson, getCGsByTeam, getUsersByTeam, getCoreTeamsByTeam, getMeetupsByPerson, getEventsForPerson } from "@/lib/firestore";
+import { formatEventDay, isMarked } from "@/lib/events";
 import Link from "next/link";
 import { Timestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
 import Spinner from "@/components/Spinner";
 import { Avatar, Button, Card, Chip, Field, RoleTag, inputClass } from "@/components/ui";
-import { FiAlertCircle, FiArchive, FiCalendar, FiCheck, FiPlus, FiUserX } from "react-icons/fi";
+import { FiAlertCircle, FiArchive, FiCalendar, FiCheck, FiMail, FiMinus, FiPlus, FiUserX } from "react-icons/fi";
 import { ContactHandle, ContactTypeTag } from "@/components/ContactActions";
 import { CONTACT_TYPES, SOURCES, CONTACT_ROLES, MILESTONES } from "@/config/app";
 
@@ -25,7 +25,8 @@ export default function PersonView() {
   const [users, setUsers] = useState([]);
   const [coreTeams, setCoreTeams] = useState([]);
   const [meetups, setMeetups] = useState([]);
-  // Events this person was ticked at, newest first. Null while unknown or if the read failed.
+  // Event records this person was ticked at or invited to, newest first. Null
+  // while unknown or if the read failed.
   const [attended, setAttended] = useState(null);
   const [showAllAttended, setShowAllAttended] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -52,7 +53,7 @@ export default function PersonView() {
       setFetching(false);
     });
     getMeetupsByPerson(id).then(setMeetups).catch(() => setMeetups([]));
-    getEventsAttendedBy(id).then(setAttended).catch(() => setAttended(null));
+    getEventsForPerson(id).then(setAttended).catch(() => setAttended(null));
   }, [id, profile?.teamId]);
 
   const set = useCallback((k, v) => setForm((f) => ({ ...f, [k]: v })), []);
@@ -405,23 +406,57 @@ export default function PersonView() {
           {attended && attended.length > 0 && (
             <Card className="order-2 flex flex-col gap-1 pb-2 md:order-none md:px-[22px] md:pb-3">
               <div className="flex items-center justify-between gap-2.5">
-                <SectionTitle>Events attended <span className="font-medium text-muted">{attended.length}</span></SectionTitle>
+                <SectionTitle>
+                  Events{" "}
+                  <span className="font-medium text-muted">
+                    {[
+                      `${attended.filter((r) => (r.present || []).includes(id)).length} came`,
+                      ...(attended.some((r) => (r.invited || []).includes(id))
+                        ? [`${attended.filter((r) => (r.invited || []).includes(id)).length} invited`]
+                        : []),
+                    ].join(" · ")}
+                  </span>
+                </SectionTitle>
                 <span className="text-[13px] text-muted">Newest first</span>
               </div>
-              {(showAllAttended ? attended : attended.slice(0, 5)).map((rec) => (
-                <Link
-                  key={rec.id}
-                  href={`/events/${rec.eventId}?date=${rec.dateStr}`}
-                  onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}
-                  className="-mx-2 flex min-h-[52px] items-center gap-3 rounded-2xl px-2 text-ink transition-colors hover:bg-tint"
-                >
-                  <span aria-hidden="true" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
-                    <FiCheck size={17} strokeWidth={2.4} />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate font-semibold">{rec.eventName}</span>
-                  <span className="shrink-0 text-sm text-muted">{formatEventDay(rec.dateStr)}</span>
-                </Link>
-              ))}
+              {(showAllAttended ? attended : attended.slice(0, 5)).map((rec) => {
+                const came = (rec.present || []).includes(id);
+                const invited = (rec.invited || []).includes(id);
+                let status;
+                let Icon = FiCheck;
+                let tone = "bg-ok-soft text-ok-ink";
+                let ink = "text-ok-ink";
+                if (came) {
+                  status = invited ? "Invited · came" : "Came";
+                } else if (isMarked(rec)) {
+                  status = "Invited · didn't come";
+                  Icon = FiMinus;
+                  tone = "bg-fill text-muted";
+                  ink = "text-muted";
+                } else {
+                  status = "Invited";
+                  Icon = FiMail;
+                  tone = "bg-brand-soft text-brand";
+                  ink = "text-brand-ink";
+                }
+                return (
+                  <Link
+                    key={rec.id}
+                    href={`/events/${rec.eventId}?date=${rec.dateStr}`}
+                    onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}
+                    className="-mx-2 flex min-h-[52px] items-center gap-3 rounded-2xl px-2 py-1 text-ink transition-colors hover:bg-tint"
+                  >
+                    <span aria-hidden="true" className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tone}`}>
+                      <Icon size={17} strokeWidth={2.4} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">{rec.eventName}</span>
+                      <span className={`block text-[13px] ${ink}`}>{status}</span>
+                    </span>
+                    <span className="shrink-0 text-sm text-muted">{formatEventDay(rec.dateStr)}</span>
+                  </Link>
+                );
+              })}
               {attended.length > 5 && (
                 <button
                   type="button"

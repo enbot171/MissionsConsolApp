@@ -499,6 +499,8 @@ export const saveReportOverrides = async (teamId, weekStart, merge, uid) => {
 // `events` holds one document per event; a weekly event is still one document.
 // `eventAttendance` holds one document per event per date, with the fixed id
 // `${eventId}_${dateStr}`, so saving the same date twice updates one record.
+// It holds who came (`present`, `walkIns`), who was invited (`invited`), and
+// `marked`: false while only invites are saved, true once attendance is taken.
 // Dates are local "YYYY-MM-DD" strings (toDateInput), never toISOString.
 
 const BATCH_LIMIT = 500;
@@ -543,13 +545,27 @@ const newestFirst = (records) => records.sort((a, b) => (a.dateStr < b.dateStr ?
 export const getAttendanceByEvent = async (eventId) =>
   newestFirst(await attendanceDocs(where("eventId", "==", eventId)));
 
-export const getAttendanceByTeam = async (teamId) =>
-  newestFirst(await attendanceDocs(where("teamId", "==", teamId)));
+// A team's records with fromStr <= dateStr <= toStr, newest first. Bounded so
+// the Events page reads only the weeks it shows, not the team's whole history.
+export const getAttendanceByTeam = async (teamId, fromStr, toStr) =>
+  newestFirst(await attendanceDocs(
+    where("teamId", "==", teamId),
+    where("dateStr", ">=", fromStr),
+    where("dateStr", "<=", toStr),
+  ));
 
-// Every event one person was ticked at, newest first. Sorted here rather than
-// in the query so it needs no composite index.
-export const getEventsAttendedBy = async (personId) =>
-  newestFirst(await attendanceDocs(where("present", "array-contains", personId)));
+// Every record one person was ticked at or invited to, newest first. Two
+// single-field queries, because Firestore allows only one array-contains per
+// query, and sorted here so neither needs a composite index. A record in both
+// comes back once.
+export const getEventsForPerson = async (personId) => {
+  const [came, invited] = await Promise.all([
+    attendanceDocs(where("present", "array-contains", personId)),
+    attendanceDocs(where("invited", "array-contains", personId)),
+  ]);
+  const byId = new Map([...came, ...invited].map((r) => [r.id, r]));
+  return newestFirst([...byId.values()]);
+};
 
 // Sunday-service records with fromStr <= dateStr < toStr, for the weekly report.
 export const getServiceAttendance = async (teamId, fromStr, toStr) =>
@@ -570,7 +586,8 @@ export const EVENT_GONE = "event-deleted";
 
 // Saves inside a transaction: re-reads the record as it is now and applies only
 // what this person changed (see mergeAttendance), so two people marking the
-// same service keep each other's ticks. The event is re-read too, so the copied
+// same service keep each other's ticks and invites. A save of invites alone
+// leaves the record `marked: false` until someone takes attendance. The event is re-read too, so the copied
 // name and "Sunday service" switch are current, and a save cannot recreate a
 // record for an event someone has just deleted. Returns the saved record.
 export const saveEventAttendance = async (event, dateStr, changes, uid) => {

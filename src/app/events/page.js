@@ -7,7 +7,7 @@ import { FiPlus } from "react-icons/fi";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { createEvent, getAttendanceByTeam, getEventsByTeam } from "@/lib/firestore";
 import {
-  addDays, attendanceDetail, attendanceTotal, daysBetween, describeEvent, eventDates, parseDateStr,
+  addDays, attendanceTotal, daysBetween, describeEvent, eventDates, isMarked, parseDateStr, recordDetail,
 } from "@/lib/events";
 import { weekStart } from "@/lib/report";
 import { toDateInput } from "@/lib/dates";
@@ -18,6 +18,13 @@ import { Banner, Button, EmptyState } from "@/components/ui";
 
 const WEEKS_BACK = 8;
 const WEEKS_AHEAD = 4;
+
+// Monday and Sunday of the current week, and the full span the page shows.
+function windowFor(now) {
+  const monday = toDateInput(weekStart(now));
+  const sunday = addDays(monday, 6);
+  return { monday, sunday, from: addDays(monday, -WEEKS_BACK * 7), to: addDays(sunday, WEEKS_AHEAD * 7) };
+}
 
 const shortDay = (dateStr) => parseDateStr(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
@@ -51,7 +58,7 @@ function EventRow({ row, today }) {
 
   let status;
   let tone;
-  if (record) {
+  if (isMarked(record)) {
     const total = attendanceTotal(record);
     status = `${total} came`;
     tone = "bg-ok-soft text-ok-ink";
@@ -62,6 +69,13 @@ function EventRow({ row, today }) {
     status = <span>Mark<span className="hidden md:inline"> attendance</span></span>;
     tone = "bg-brand text-white";
   }
+
+  // Before attendance is taken the row says who is invited; after, how it went.
+  const invited = (record?.invited || []).length;
+  const detail = [
+    isMarked(record) ? recordDetail(record) : invited > 0 ? `${invited} invited` : "",
+    describeEvent(event),
+  ].filter(Boolean).join(" · ");
 
   return (
     <Link
@@ -83,7 +97,7 @@ function EventRow({ row, today }) {
         </span>
         <span className="block truncate text-[13px] text-muted">
           <span className="sr-only">{shortDay(dateStr)}. </span>
-          {record ? `${attendanceDetail(record)} · ${describeEvent(event)}` : describeEvent(event)}
+          {detail}
         </span>
       </span>
       <span className={`inline-flex h-[30px] shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[13px] font-semibold md:h-8 ${tone}`}>
@@ -122,14 +136,18 @@ export default function EventsPage() {
   useEffect(() => {
     if (authLoading || !teamId) return;
     let current = true;
-    Promise.all([getEventsByTeam(teamId), getAttendanceByTeam(teamId)])
+    const { from, to } = windowFor(new Date());
+    Promise.all([getEventsByTeam(teamId), getAttendanceByTeam(teamId, from, to)])
       .then(([ev, att]) => {
         if (!current) return;
         setEvents(ev);
         setRecords(att);
         setFailed(false);
       })
-      .catch(() => { if (current) setFailed(true); })
+      .catch((err) => {
+        console.error("Could not load events", err);
+        if (current) setFailed(true);
+      })
       .finally(() => { if (current) setFetching(false); });
     return () => { current = false; };
   }, [authLoading, teamId, attempt]);
@@ -145,15 +163,14 @@ export default function EventsPage() {
   };
 
   const today = toDateInput(new Date());
-  const monday = toDateInput(weekStart(new Date()));
-  const sunday = addDays(monday, 6);
+  const { monday, sunday, from, to } = windowFor(new Date());
 
   const thisWeek = buildRows(events, records, monday, sunday).sort(byDate);
   // Only each event's next date: four rows of the same weekly service say nothing.
-  const comingUp = buildRows(events, records, addDays(sunday, 1), addDays(sunday, WEEKS_AHEAD * 7))
+  const comingUp = buildRows(events, records, addDays(sunday, 1), to)
     .sort(byDate)
     .filter((row, i, rows) => rows.findIndex((r) => r.event.id === row.event.id) === i);
-  const earlier = buildRows(events, records, addDays(monday, -WEEKS_BACK * 7), addDays(monday, -1)).sort(byDate).reverse();
+  const earlier = buildRows(events, records, from, addDays(monday, -1)).sort(byDate).reverse();
 
   const newButton = teamId && !fetching && !failed && (
     <Button onClick={() => setShowForm(true)} aria-expanded={showForm} className="max-md:gap-1.5 max-md:px-4 max-md:shadow-none md:px-[18px]">

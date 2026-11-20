@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   addDays, occurrencesBetween, eventDates, attendanceTotal, serviceCount,
-  attendanceChanges, mergeAttendance, attendanceId,
+  attendanceChanges, mergeAttendance, attendanceId, isMarked, hasChanges, marksAttendance,
+  invitedWhoCame, recordDetail,
 } from "@/lib/events";
 import { weekStart, weekEnd, buildWeeklyReport } from "@/lib/report";
 import { toDateInput } from "@/lib/dates";
@@ -108,11 +109,21 @@ describe("counting", () => {
 describe("saving attendance", () => {
   it("works out what this phone changed", () => {
     const loaded = { present: ["a", "b"], walkIns: 2 };
-    expect(attendanceChanges(loaded, ["b", "c"], 5)).toEqual({ ticked: ["c"], unticked: ["a"], walkInsDelta: 3 });
+    expect(attendanceChanges(loaded, ["b", "c"], 5)).toEqual({
+      ticked: ["c"], unticked: ["a"], walkInsDelta: 3, invitedAdded: [], invitedRemoved: [],
+    });
   });
 
   it("treats a first save as ticking everyone chosen", () => {
-    expect(attendanceChanges(null, ["a"], 1)).toEqual({ ticked: ["a"], unticked: [], walkInsDelta: 1 });
+    expect(attendanceChanges(null, ["a"], 1)).toEqual({
+      ticked: ["a"], unticked: [], walkInsDelta: 1, invitedAdded: [], invitedRemoved: [],
+    });
+  });
+
+  it("leaves invites alone when they are not passed", () => {
+    const changes = attendanceChanges({ present: [], invited: ["a"] }, ["a"], 0);
+    expect(changes.invitedAdded).toEqual([]);
+    expect(changes.invitedRemoved).toEqual([]);
   });
 
   it("keeps both people's ticks when two phones save from the same start", () => {
@@ -138,11 +149,80 @@ describe("saving attendance", () => {
   });
 
   it("starts from nothing when no record is saved yet", () => {
-    expect(mergeAttendance(null, { ticked: ["a"], walkInsDelta: 2 })).toEqual({ present: ["a"], walkIns: 2 });
+    expect(mergeAttendance(null, { ticked: ["a"], walkInsDelta: 2 })).toEqual({
+      present: ["a"], walkIns: 2, invited: [], marked: true,
+    });
   });
+
 
   it("uses one fixed id per event per date", () => {
     expect(attendanceId("ev1", "2026-11-22")).toBe("ev1_2026-11-22");
+  });
+});
+
+describe("invites", () => {
+  it("works out who this phone invited and un-invited", () => {
+    const loaded = { present: [], walkIns: 0, invited: ["a", "b"] };
+    const changes = attendanceChanges(loaded, [], 0, ["b", "c"]);
+    expect(changes.invitedAdded).toEqual(["c"]);
+    expect(changes.invitedRemoved).toEqual(["a"]);
+    expect(hasChanges(changes)).toBe(true);
+    expect(marksAttendance(changes)).toBe(false);
+  });
+
+  it("saves invites alone as not marked yet", () => {
+    const merged = mergeAttendance(null, { invitedAdded: ["a", "b"] });
+    expect(merged).toEqual({ present: [], walkIns: 0, invited: ["a", "b"], marked: false });
+    expect(isMarked(merged)).toBe(false);
+  });
+
+  it("marks the record once someone is ticked or walk-ins change", () => {
+    const invitesOnly = { present: [], walkIns: 0, invited: ["a"], marked: false };
+    expect(mergeAttendance(invitesOnly, { ticked: ["a"] }).marked).toBe(true);
+    expect(mergeAttendance(invitesOnly, { walkInsDelta: 2 }).marked).toBe(true);
+  });
+
+  it("can mark a date where nobody came", () => {
+    const invitesOnly = { present: [], walkIns: 0, invited: ["a"], marked: false };
+    expect(mergeAttendance(invitesOnly, { markTaken: true })).toEqual({
+      present: [], walkIns: 0, invited: ["a"], marked: true,
+    });
+  });
+
+  it("keeps a record marked when only invites change later", () => {
+    const marked = { present: ["a"], walkIns: 0, invited: [], marked: true };
+    expect(mergeAttendance(marked, { invitedAdded: ["b"] }).marked).toBe(true);
+  });
+
+  it("counts records saved before invites existed as marked", () => {
+    expect(isMarked({ present: ["a"], walkIns: 1 })).toBe(true);
+    expect(mergeAttendance({ present: ["a"], walkIns: 1 }, { invitedAdded: ["b"] }).marked).toBe(true);
+    expect(isMarked(null)).toBe(false);
+  });
+
+  it("keeps both people's invites when two phones save from the same start", () => {
+    const loaded = { present: [], walkIns: 0, invited: ["a"], marked: false };
+    const one = attendanceChanges(loaded, [], 0, ["a", "b"]);
+    const two = attendanceChanges(loaded, [], 0, ["c"]);
+    const after = mergeAttendance(mergeAttendance(loaded, one), two);
+    expect(after.invited.sort()).toEqual(["b", "c"]);
+    expect(after.marked).toBe(false);
+  });
+
+  it("counts how many invited people came", () => {
+    expect(invitedWhoCame({ present: ["a", "x"], invited: ["a", "b"] })).toBe(1);
+    expect(invitedWhoCame(null)).toBe(0);
+  });
+
+  it("describes a record with and without invites", () => {
+    expect(recordDetail({ present: [], walkIns: 0, invited: ["a", "b"], marked: false })).toBe("2 invited · not marked yet");
+    expect(recordDetail({ present: ["a"], walkIns: 1, invited: ["a", "b"], marked: true }))
+      .toBe("1 person + 1 walk-in · 1 of 2 invited came");
+    expect(recordDetail({ present: ["a"], walkIns: 0 })).toBe("1 person + 0 walk-ins");
+  });
+
+  it("adds nothing to No. in Service for invites alone", () => {
+    expect(serviceCount([{ isService: true, present: [], walkIns: 0, invited: ["a", "b"], marked: false }])).toBe(0);
   });
 });
 
