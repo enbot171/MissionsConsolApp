@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { initializeApp, deleteApp } from "firebase/app";
-import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { firebaseConfig } from "@/lib/firebase";
 import { addUserProfile, getAllTeams } from "@/lib/firestore";
 import AdminPageShell from "@/components/AdminPageShell";
@@ -18,13 +18,23 @@ const PASSWORD_MSG = "Password must be at least 6 characters.";
 
 const fieldClass = `${inputClass} font-normal aria-invalid:ring-danger-ink md:min-h-11 md:text-[15px]`;
 
+// A long random password for someone who will only ever use Google. Nobody is
+// told it; Firebase needs some password to create the account.
+function randomPassword() {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return Array.from(bytes, (b) => b.toString(36).padStart(2, "0")).join("");
+}
+
 export default function AdminAddUser() {
   const { loading, profile } = useRequireAuth();
   const router = useRouter();
   const [teams, setTeams] = useState([]);
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "Member", teamId: "" });
+  const [googleOnly, setGoogleOnly] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Set once the user exists: { name, email, googleOnly, verifySent }.
+  const [created, setCreated] = useState(null);
 
   useEffect(() => {
     if (!loading && profile && profile.role !== "Admin") router.push("/");
@@ -39,28 +49,80 @@ export default function AdminAddUser() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.email.trim() || !form.password) return setError("All fields are required.");
-    if (form.password.length < 6) return setError("Password must be at least 6 characters.");
+    if (!form.name.trim() || !form.email.trim() || (!googleOnly && !form.password)) return setError(REQUIRED_MSG);
+    if (!googleOnly && form.password.length < 6) return setError(PASSWORD_MSG);
     setSaving(true); setError("");
     let secondaryApp;
     try {
       secondaryApp = initializeApp(firebaseConfig, "user-creation-" + Date.now());
       const secondaryAuth = getAuth(secondaryApp);
-      const cred = await createUserWithEmailAndPassword(secondaryAuth, form.email, form.password);
+      const email = form.email.trim();
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, email, googleOnly ? randomPassword() : form.password);
       await addUserProfile(cred.user.uid, {
-        name: form.name,
-        email: form.email,
+        name: form.name.trim(),
+        email,
         role: form.role,
         teamId: form.teamId || null,
       });
-      router.push("/admin/users");
+      // A verified email lets the person use both Google and their password:
+      // without it, Firebase drops the password the first time they use Google.
+      // The account already exists, so a failed email is reported, not fatal.
+      const verifySent = await sendEmailVerification(cred.user).then(() => true, () => false);
+      setCreated({ name: form.name.trim(), email, googleOnly, verifySent });
     } catch (err) {
-      setError(err.message || "Failed to create user.");
-      setSaving(false);
+      setError(
+        err?.code === "auth/email-already-in-use"
+          ? "A user with this email already exists."
+          : err?.code === "auth/invalid-email"
+            ? "That email address is not valid."
+            : err.message || "Failed to create user."
+      );
     } finally {
+      setSaving(false);
       if (secondaryApp) await deleteApp(secondaryApp);
     }
   };
+
+  const addAnother = () => {
+    setForm({ name: "", email: "", password: "", role: "Member", teamId: "" });
+    setGoogleOnly(false);
+    setCreated(null);
+  };
+
+  if (created) {
+    return (
+      <AdminPageShell title="Add user" backHref="/admin/users" backLabel="Users">
+        <section className="-mt-0.5 flex max-w-140 flex-col gap-3 md:-mt-1.5 md:rounded-3xl md:bg-white md:px-[22px] md:pb-[22px] md:pt-5 md:shadow-card">
+          <h2 className="flex items-center gap-2 text-[17px] font-bold tracking-[-0.015em]">
+            <span aria-hidden="true" className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-ok-soft text-ok-ink">
+              <FiCheck size={16} strokeWidth={2.6} />
+            </span>
+            {created.name} can now sign in
+          </h2>
+          <p className="text-ink-2">
+            {created.googleOnly
+              ? <>Tell them to use <b className="text-ink">Continue with Google</b> with {created.email}.</>
+              : <>They can sign in with {created.email} and the password you set, or with <b className="text-ink">Continue with Google</b> if it is a Google account.</>}
+          </p>
+          {created.verifySent ? (
+            <p className="rounded-[14px] bg-tint px-3.5 py-3 text-sm text-ink-2">
+              A &ldquo;verify your email&rdquo; message was sent to {created.email}. Ask them to click the link in it
+              (check spam too){created.googleOnly ? "." : ", so their password keeps working after they use Google."}
+            </p>
+          ) : (
+            <ErrorAlert>
+              The account was created, but the verification email could not be sent. They can still sign in.
+              {!created.googleOnly && " If they use Google, their password may stop working."}
+            </ErrorAlert>
+          )}
+          <div className="mt-1 flex flex-wrap gap-2.5">
+            <Button onClick={addAnother}>Add another user</Button>
+            <Button variant="outline" onClick={() => router.push("/admin/users")}>Back to users</Button>
+          </div>
+        </section>
+      </AdminPageShell>
+    );
+  }
 
   // The board marks the fields a message is about; both are read off `error`.
   const missing = (key) => error === REQUIRED_MSG && !(key === "password" ? form.password : form[key].trim());
@@ -72,10 +134,26 @@ export default function AdminAddUser() {
         <section className="flex flex-col gap-3 md:gap-3.5 md:rounded-3xl md:bg-white md:px-[22px] md:pb-[22px] md:pt-5 md:shadow-card">
           <h2 className="text-[17px] font-bold tracking-[-0.015em]">New user</h2>
 
+          <button
+            type="button"
+            role="switch"
+            aria-checked={googleOnly}
+            onClick={() => { setGoogleOnly((v) => !v); setError(""); }}
+            className="flex items-center justify-between gap-3 rounded-[14px] bg-tint px-3.5 py-3 text-left transition-colors hover:bg-fill"
+          >
+            <span className="min-w-0">
+              <span className="block font-semibold">Signs in with Google only</span>
+              <span className="block text-[13px] text-muted">No password to set. Use their Google email below.</span>
+            </span>
+            <span aria-hidden="true" className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${googleOnly ? "bg-brand" : "bg-line"}`}>
+              <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-[left] ${googleOnly ? "left-[22px]" : "left-0.5"}`} />
+            </span>
+          </button>
+
           {[
             { label: "Name", key: "name", type: "text", placeholder: "Full name", autoComplete: "off" },
-            { label: "Email", key: "email", type: "email", placeholder: "user@example.com", autoComplete: "off" },
-            { label: "Password", key: "password", type: "password", placeholder: "Min. 6 characters", autoComplete: "new-password" },
+            { label: googleOnly ? "Google email" : "Email", key: "email", type: "email", placeholder: googleOnly ? "name@gmail.com" : "user@example.com", autoComplete: "off" },
+            ...(googleOnly ? [] : [{ label: "Password", key: "password", type: "password", placeholder: "Min. 6 characters", autoComplete: "new-password" }]),
           ].map(({ label, key, type, placeholder, autoComplete }) => {
             const short = key === "password" && passwordShort;
             return (
