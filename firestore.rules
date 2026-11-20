@@ -6,6 +6,13 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Signed in AND given a profile by an admin. Signing in alone (for example
+    // with any Google account) is not enough to see team data.
+    function isMember() {
+      return isAuth() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function isAdmin() {
       return isAuth() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
@@ -19,54 +26,55 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if isAuth();
+      // Your own profile is readable before it exists, so sign-in can check it.
+      allow read: if isAuth() && (request.auth.uid == uid || isMember());
       allow create: if isLeaderOrAdmin();
-      allow update: if isAuth() && (request.auth.uid == uid || isAdmin());
+      allow update: if isMember() && (request.auth.uid == uid || isAdmin());
       allow delete: if isAdmin();
     }
 
     match /teams/{teamId} {
-      allow read: if isAuth();
+      allow read: if isMember();
       allow write: if isAdmin();
     }
 
     match /people/{personId} {
-      allow read, write: if isAuth();
+      allow read, write: if isMember();
     }
 
     match /cgs/{cgId} {
-      allow read, write: if isAuth();
+      allow read, write: if isMember();
     }
 
     match /coreTeams/{teamId} {
-      allow read: if isAuth();
+      allow read: if isMember();
       allow write: if isLeaderOrAdmin();
     }
 
     match /attendance/{recordId} {
-      allow read, write: if isAuth();
+      allow read, write: if isMember();
     }
 
     match /meetups/{meetupId} {
-      allow read, write: if isAuth();
+      allow read, write: if isMember();
     }
 
     match /testimonies/{testimonyId} {
-      allow read, write: if isAuth();
+      allow read, write: if isMember();
     }
 
     // Hand-typed numbers for the weekly report, one document per team per week.
     match /reportOverrides/{docId} {
-      allow read, write: if isAuth();
+      allow read, write: if isMember();
     }
 
     // Team events (Sunday service, gatherings, one-offs) and who came to each.
     match /events/{eventId} {
-      allow read, write: if isAuth();
+      allow read, write: if isMember();
     }
 
     match /eventAttendance/{docId} {
-      allow read, write: if isAuth();
+      allow read, write: if isMember();
     }
 
     // Google refresh tokens. Denied to every client; the Admin SDK bypasses
