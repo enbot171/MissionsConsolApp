@@ -148,6 +148,86 @@ export function buildWeeklyReport({ members = [], people = [], noContact = [], m
   return { start, evangelism, connection, signs, progress, members };
 }
 
+// ── Manual overrides ──────────────────────────────────────────────────────────
+//
+// A team can type its own number into any member/day cell of sections A and B.
+// Those numbers are stored apart from the records the report counts, as a flat
+// map of "metric|uid|day" → number, and laid over the counted report here.
+
+export const overrideKey = (metricKey, uid, day) => `${metricKey}|${uid}|${day}`;
+
+const OVERRIDE_SECTIONS = ["evangelism", "connection"];
+
+function parseKey(key) {
+  const [metricKey, uid, dayText] = String(key).split("|");
+  const day = Number(dayText);
+  if (!metricKey || !uid || !Number.isInteger(day) || day < 0 || day > 6) return null;
+  return { metricKey, uid, day };
+}
+
+// The cell a key points at in a report, or null when the metric or the member
+// is not in it (a member who has left the team has no row any more).
+function findCell(report, key) {
+  const parsed = parseKey(key);
+  if (!parsed) return null;
+  for (const section of OVERRIDE_SECTIONS) {
+    const row = (report[section] || []).find((r) => r.key === parsed.metricKey);
+    if (!row) continue;
+    const member = row.members.find((m) => m.uid === parsed.uid);
+    return member ? { row, member, day: parsed.day } : null;
+  }
+  return null;
+}
+
+/**
+ * A copy of `report` with the override values in place.
+ *
+ * Totals move by the difference rather than being re-added from the member
+ * rows: a record owned by someone outside the member list counts toward the
+ * team total without having a row, and that has to survive an edit elsewhere.
+ */
+export function applyOverrides(report, cells) {
+  const out = { ...report };
+  OVERRIDE_SECTIONS.forEach((section) => {
+    out[section] = (report[section] || []).map((row) => ({
+      ...row,
+      members: row.members.map((m) => ({ ...m, days: [...m.days] })),
+      totals: [...row.totals],
+    }));
+  });
+
+  Object.entries(cells || {}).forEach(([key, value]) => {
+    const cell = findCell(out, key);
+    if (!cell || !Number.isFinite(value)) return;
+    const { row, member, day } = cell;
+    const diff = value - member.days[day];
+    member.days[day] = value;
+    member.total += diff;
+    row.totals[day] += diff;
+    row.total += diff;
+  });
+
+  return out;
+}
+
+/**
+ * The overrides to store after an editing session.
+ *
+ * `changes` holds only the cells the user changed. One that now equals what the
+ * app counts stops being an override; any other is stored. Everything else in
+ * `existingCells` is kept as it was, including cells for people who are no
+ * longer on the team, so one person's save never erases another's edits.
+ */
+export function mergeOverrides(countedReport, existingCells, changes) {
+  const next = { ...(existingCells || {}) };
+  Object.entries(changes || {}).forEach(([key, value]) => {
+    const cell = findCell(countedReport, key);
+    if (cell && cell.member.days[cell.day] === value) delete next[key];
+    else next[key] = value;
+  });
+  return next;
+}
+
 // ── CSV ───────────────────────────────────────────────────────────────────────
 
 function cell(v) {

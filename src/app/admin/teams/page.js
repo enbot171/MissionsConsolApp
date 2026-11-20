@@ -4,15 +4,17 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getAllUsers, getAllTeams } from "@/lib/firestore";
-import AdminBottomNav from "@/components/AdminBottomNav";
+import AdminPageShell from "@/components/AdminPageShell";
 import Spinner from "@/components/Spinner";
+import { Avatar, Button } from "@/components/ui";
 import { FiPlus, FiChevronDown, FiChevronUp } from "react-icons/fi";
-import { HiOutlineUserGroup } from "react-icons/hi";
+
+const TEAMS_ICON = "M12 11.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6.5 19c.5-3.2 2.7-4.8 5.5-4.8s5 1.6 5.5 4.8M5.6 12.2a2.2 2.2 0 0 1 0-4.4M18.4 7.8a2.2 2.2 0 0 1 0 4.4M2.5 17.5c.2-1.5 1-2.5 2.3-2.9M21.5 17.5c-.2-1.5-1-2.5-2.3-2.9";
 
 const roleColor = {
-  Admin: "bg-gray-800 text-white",
-  Leader: "bg-violet-100 text-violet-700",
-  Member: "bg-gray-100 text-gray-700",
+  Admin: "bg-navy text-white",
+  Leader: "bg-role-cgl text-role-cgl-ink",
+  Member: "bg-line-soft text-ink-2",
 };
 
 export default function AdminTeams() {
@@ -34,84 +36,99 @@ export default function AdminTeams() {
       .finally(() => setFetching(false));
   }, [loading, profile]);
 
-  if (loading || fetching) return <Spinner fullScreen />;
+  if (loading) return <Spinner fullScreen />;
 
   if (profile?.role !== "Admin") return null;
 
   const teamMembers = (teamId) => users.filter((u) => u.teamId === teamId);
 
+  const addButton = (
+    <Button className="max-md:gap-1.5 max-md:shadow-none md:px-[18px]" onClick={() => router.push("/admin/teams/new")}>
+      <FiPlus size={17} aria-hidden="true" /> Add team
+    </Button>
+  );
+
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
-      <div className="bg-linear-to-br from-gray-900 to-gray-700 px-5 pt-12 pb-8">
-        <div className="max-w-lg mx-auto flex items-end justify-between">
-          <div>
-            <p className="text-gray-400 text-sm font-medium">Admin</p>
-            <h1 className="text-white text-2xl font-bold tracking-tight mt-0.5">Teams</h1>
-          </div>
+    <AdminPageShell title="Teams" subtitle="Admin" rightAction={addButton}>
+      {fetching ? (
+        <Spinner />
+      ) : teams.length === 0 ? (
+        <div className="flex max-w-215 flex-col items-center gap-1.5 rounded-3xl bg-white px-6 py-12 text-center ring-1 ring-navy/[0.08] md:-mt-1.5">
+          <span aria-hidden="true" className="mb-2 flex h-14 w-14 items-center justify-center rounded-[18px] bg-brand-soft text-brand">
+            <BoardIcon d={TEAMS_ICON} size={26} />
+          </span>
+          <p className="text-[17px] font-bold tracking-[-0.015em]">No teams yet.</p>
           <button
+            type="button"
             onClick={() => router.push("/admin/teams/new")}
-            className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white text-sm font-semibold px-3.5 py-2 rounded-xl transition-colors"
+            className="mt-3 inline-flex h-11 items-center gap-2 rounded-[14px] bg-brand px-5 font-semibold text-white transition-colors hover:bg-navy"
           >
-            <FiPlus size={15} /> Add Team
+            <FiPlus size={17} aria-hidden="true" /> Add team
           </button>
         </div>
-      </div>
-
-      <main className="flex-1 pb-24 -mt-4">
-        <div className="px-4 max-w-lg mx-auto space-y-2">
-          {teams.length === 0 ? (
-            <p className="text-sm text-gray-600 text-center py-12">No teams yet.</p>
-          ) : (
-            teams.map((team) => {
-              const members = teamMembers(team.id);
-              const open = expanded === team.id;
-              return (
-                <div key={team.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  <button
-                    onClick={() => setExpanded(open ? null : team.id)}
-                    className="w-full flex items-center gap-3 px-4 py-4 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
-                      <HiOutlineUserGroup className="text-violet-600" size={17} />
-                    </div>
-                    <div className="flex-1 text-left">
-                      <p className="font-semibold text-gray-900">{team.name}</p>
-                      <p className="text-xs text-gray-600">{members.length} member{members.length !== 1 ? "s" : ""}</p>
-                    </div>
-                    {open
-                      ? <FiChevronUp className="text-gray-400" size={16} />
-                      : <FiChevronDown className="text-gray-400" size={16} />}
-                  </button>
-                  {open && (
-                    <div className="border-t border-gray-100 divide-y divide-gray-100">
-                      {members.length === 0 ? (
-                        <p className="px-4 py-3 text-sm text-gray-600">No members in this team.</p>
-                      ) : (
-                        members.map((u) => (
-                          <div key={u.id} className="px-4 py-3 flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                              <span className="text-xs font-bold text-gray-700">{u.name?.charAt(0)}</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate">{u.name}</p>
-                              <p className="text-xs text-gray-600 truncate">{u.email}</p>
-                            </div>
-                            <span className={`text-[10px] font-semibold px-2 py-1 rounded-lg shrink-0 ${roleColor[u.role] || "bg-gray-100 text-gray-700"}`}>
+      ) : (
+        <ul className="flex max-w-215 flex-col gap-2.5 md:-mt-1.5 md:gap-3">
+          {teams.map((team) => {
+            const members = teamMembers(team.id);
+            const open = expanded === team.id;
+            return (
+              <li key={team.id} className="overflow-hidden rounded-[20px] bg-tint md:rounded-3xl md:bg-white md:shadow-card">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setExpanded(open ? null : team.id)}
+                  className="flex min-h-17 w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-fill md:min-h-19 md:gap-3.5 md:px-5.5 md:py-3.5 md:hover:bg-tint"
+                >
+                  <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-role-cgl text-role-cgl-ink">
+                    <BoardIcon d={TEAMS_ICON} size={21} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-base font-semibold tracking-[-0.01em] md:text-[17px] md:font-bold md:tracking-[-0.015em]">{team.name}</span>
+                    <span className="block text-[13px] text-muted">{members.length} member{members.length !== 1 ? "s" : ""}</span>
+                  </span>
+                  {open
+                    ? <FiChevronUp className="shrink-0 text-muted" size={18} aria-hidden="true" />
+                    : <FiChevronDown className="shrink-0 text-muted" size={18} aria-hidden="true" />}
+                </button>
+                {open && (
+                  <div className="border-t border-line px-3.5 pb-2 md:mx-5.5 md:border-line-soft md:px-0 md:pb-3">
+                    {members.length === 0 ? (
+                      <p className="pb-1.5 pt-3 text-sm text-muted md:pb-1 md:pt-3.5">No members in this team.</p>
+                    ) : (
+                      <ul className="pt-0.5 md:pt-1">
+                        {members.map((u) => (
+                          <li
+                            key={u.id}
+                            className="flex min-h-14.5 items-center gap-3 md:grid md:grid-cols-[40px_minmax(0,1fr)_minmax(0,1.4fr)_auto] md:gap-x-3.5"
+                          >
+                            <Avatar name={u.name} size="sm" className="max-md:h-[38px] max-md:w-[38px] md:h-10 md:w-10 md:rounded-[13px]" />
+                            <span className="min-w-0 flex-1 md:contents">
+                              <span className="block truncate font-semibold tracking-[-0.01em]">{u.name}</span>
+                              <span className="block truncate text-[13px] text-muted md:text-[15px]">{u.email}</span>
+                            </span>
+                            <span className={`inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[12.5px] font-semibold ${roleColor[u.role] || "bg-line-soft text-ink-2"}`}>
                               {u.role}
                             </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </main>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </AdminPageShell>
+  );
+}
 
-      <AdminBottomNav />
-    </div>
+// The board's own line icon, drawn from its path.
+function BoardIcon({ d, size }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
   );
 }

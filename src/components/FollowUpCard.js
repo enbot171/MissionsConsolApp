@@ -1,13 +1,22 @@
 "use client";
 
-import { FiArchive, FiCheck, FiChevronDown, FiEdit3 } from "react-icons/fi";
-import { ROLE_STYLES } from "@/config/app";
-import ContactActions from "@/components/ContactActions";
+import { FiArchive, FiCheck, FiEdit3 } from "react-icons/fi";
+import ContactLine from "@/components/ContactActions";
+import { Avatar, Button, Field, RoleTag, inputClass } from "@/components/ui";
+
+const spinnerClass = "h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent";
+
+// The form controls in the log panel are 44px tall on the board; the shared
+// input class is 48px, so the height is forced here.
+const panelInputClass = `${inputClass} min-h-11! font-normal`;
 
 export default function FollowUpCard({
   person,
   badge,
   badgeColor,
+  // Optional: class for the dot before the due line. Defaults to the warning
+  // dot for a warning-coloured badge and the green dot otherwise.
+  dotColor,
   onNavigate,
   onCheck,
   onArchive,
@@ -27,143 +36,195 @@ export default function FollowUpCard({
 
   const setDraft = (k, v) => onDraftChange?.({ ...draft, [k]: v });
 
+  const logOpen = expanded && draft;
+  const checkText = checkLabel || "Mark as followed up";
+  const dot = dotColor || (badgeColor?.includes("warn") ? "bg-warn" : "bg-ok-ink");
+  const hasContact = !!(person.contactType || person.contact);
+  const showNote = person.followUpRemarks && !expanded;
+
+  const dueLine = (
+    <>
+      <span aria-hidden="true" className={`h-[7px] w-[7px] shrink-0 rounded-full ${dot}`} />
+      <span className="min-w-0">
+        {badge}
+        {person.followUpDays && ` · every ${person.followUpDays} ${Number(person.followUpDays) === 1 ? "day" : "days"}`}
+      </span>
+    </>
+  );
+
+  // Laid out by the card's own width, not the screen's: the same card sits in a
+  // narrow column on Home and a wide one on Follow-ups. Narrow is the phone
+  // board (two stacked rows), wide is the laptop board (one row).
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-      <div className="px-3 py-2.5 flex items-center gap-2.5">
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={onNavigate}>
-          <p className="text-sm font-semibold text-gray-900 truncate">{person.name}</p>
-          {(person.contactType || person.contact) && (
-            <p className="text-xs text-gray-600 truncate flex items-center gap-1.5">
-              <span className="truncate">
-                {person.contactType ? `${person.contactType} - ${person.contact}` : person.contact}
-              </span>
-              <ContactActions contactType={person.contactType} contact={person.contact} size={12} />
-            </p>
-          )}
-          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-            {showRoles && (person.roles || []).map((r) => (
-              <span key={r} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${ROLE_STYLES[r] || "bg-gray-100 text-gray-700"}`}>
-                {r}
-              </span>
-            ))}
-            <span className={`text-[10px] font-semibold ${badgeColor}`}>{badge}</span>
-            {person.followUpDays && (
-              <span className="text-[10px] text-gray-500">· every {person.followUpDays}d</span>
-            )}
-          </div>
-          {person.followUpRemarks && !expanded && (
-            <p className="mt-1.5 pl-2 border-l-2 border-amber-400 text-xs text-amber-900 italic whitespace-pre-wrap break-words">
-              {person.followUpRemarks}
-            </p>
-          )}
-        </div>
-
-        {onToggle && (
-          <button
-            onClick={onToggle}
-            disabled={busy}
-            title="Log follow-up"
-            className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg border transition-colors disabled:opacity-50 ${
-              expanded
-                ? "border-blue-200 bg-blue-50 text-blue-600"
-                : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100"
-            }`}
-          >
-            <FiEdit3 size={11} />
-            <span className="text-[10px] font-semibold">Log</span>
-            <FiChevronDown size={11} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
-          </button>
-        )}
-
-        {onArchive && (
-          <button
-            onClick={() => onArchive(person)}
-            disabled={busy}
-            className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 transition-colors"
-          >
-            {isArchiving
-              ? <span className="w-3 h-3 rounded-full border border-red-400 border-t-transparent animate-spin" />
-              : <FiArchive size={11} className="text-red-500" />}
-            <span className="text-[10px] font-semibold text-red-500">Archive</span>
-          </button>
-        )}
-
-        <button
-          onClick={() => onCheck(person)}
-          disabled={busy}
-          title={checkLabel || "Mark as followed up"}
-          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 ${
-            isChecking ? "bg-emerald-500 border-emerald-500" : "border-gray-300 hover:border-emerald-400"
+    <div className="@container">
+      <div
+        className={
+          logOpen
+            ? "overflow-hidden rounded-[20px] bg-white shadow-card @3xl:rounded-3xl"
+            : "rounded-[20px] bg-tint @3xl:rounded-[18px]"
+        }
+      >
+        <div
+          className={`flex flex-col gap-2 py-3 pl-3.5 pr-3 @3xl:flex-row @3xl:flex-wrap @3xl:items-center @3xl:gap-3.5 @3xl:px-4 ${
+            logOpen ? "@3xl:py-3.5" : ""
           }`}
         >
-          {isChecking && <FiCheck size={11} className="text-white" />}
-        </button>
-      </div>
+          <div className="flex items-center gap-3 @3xl:contents">
+            <Avatar name={person.name} />
 
-      {expanded && draft && (
-        <div className="border-t border-gray-100 px-3 py-3 space-y-3 bg-gray-50/60 rounded-b-xl">
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-gray-700">Follow-up remarks</label>
-            <textarea
-              value={draft.followUpRemarks}
-              onChange={(e) => setDraft("followUpRemarks", e.target.value)}
-              rows={3}
-              placeholder="What to talk about next time…"
-              className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 resize-none"
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <div className="flex-1 min-w-0 space-y-1">
-              <label className="text-[11px] font-semibold text-gray-700">Next follow-up</label>
-              <input
-                type="date"
-                value={draft.scheduledFollowUpAt}
-                onChange={(e) => setDraft("scheduledFollowUpAt", e.target.value)}
-                className="w-full min-w-0 bg-white border border-gray-200 rounded-xl px-2.5 py-2 text-xs text-gray-900 outline-none focus:border-blue-500"
-              />
-            </div>
-            <div className="w-24 shrink-0 space-y-1">
-              <label className="text-[11px] font-semibold text-gray-700">Every (days)</label>
-              <input
-                type="number"
-                min="1"
-                value={draft.followUpDays}
-                onChange={(e) => setDraft("followUpDays", e.target.value)}
-                placeholder="None"
-                className="w-full bg-white border border-gray-200 rounded-xl px-2.5 py-2 text-xs text-gray-900 outline-none focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => onSaveLog(person, draft, false)}
-              disabled={busy}
-              className="flex-1 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 text-xs font-semibold hover:bg-gray-100 disabled:opacity-50 transition-colors"
+            <div
+              className={`min-w-0 flex-1 cursor-pointer ${logOpen ? "@3xl:flex-[1_1_220px]" : "@3xl:flex-[1_1_200px]"}`}
+              onClick={onNavigate}
             >
-              Save only
-            </button>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {/* The click is handled by the wrapper; the button makes it reachable by keyboard. */}
+                <button
+                  type="button"
+                  className="min-w-0 max-w-full truncate text-left text-base font-semibold tracking-[-0.01em] text-ink @3xl:text-[15px] @3xl:tracking-normal"
+                >
+                  {person.name}
+                </button>
+                {showRoles && (person.roles || []).map((r) => (
+                  <RoleTag key={r} role={r} className="shrink-0 h-[22px]! px-[9px]! text-xs!" />
+                ))}
+              </div>
+
+              {/* Phone: the due line sits under the name. Laptop shows it in its own column. */}
+              <p
+                className={`flex items-center gap-1.5 text-[13px] font-semibold ${badgeColor} ${
+                  expanded && !hasContact ? "" : "@3xl:hidden"
+                }`}
+              >
+                {dueLine}
+              </p>
+
+              {hasContact && (
+                <ContactLine contactType={person.contactType} contact={person.contact} className="mt-0.5">
+                  {/* Laptop, log open: the due line folds into this one, as on the board. */}
+                  {expanded && <span className="hidden shrink-0 @3xl:inline">· {badge}</span>}
+                </ContactLine>
+              )}
+            </div>
+
             <button
-              onClick={() => onSaveLog(person, draft, true)}
+              type="button"
+              onClick={() => onCheck(person)}
               disabled={busy}
-              className="flex-2 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+              title={checkText}
+              aria-label={`${checkText}: ${person.name}`}
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand text-white transition-colors hover:bg-navy disabled:cursor-not-allowed disabled:opacity-50 @3xl:order-4 ${
+                logOpen ? "@3xl:hidden" : ""
+              }`}
             >
-              {isLogging
-                ? <span className="w-3 h-3 rounded-full border border-white border-t-transparent animate-spin" />
-                : <FiCheck size={12} />}
-              Save &amp; mark followed up
+              {isChecking ? <span className={spinnerClass} /> : <FiCheck size={18} strokeWidth={2.4} aria-hidden="true" />}
             </button>
           </div>
 
-          <button
-            onClick={onNavigate}
-            className="w-full text-[11px] text-gray-400 hover:text-gray-600 font-semibold"
-          >
-            Open full profile →
-          </button>
+          {/* Always rendered: on laptop it holds the due line even when there is nothing else in it. */}
+          {(
+            <div className={`${showNote || onToggle || onArchive ? "flex" : "hidden"} items-center gap-2.5 @3xl:contents`}>
+              <div className={`min-w-0 flex-1 @3xl:order-1 @3xl:flex-[1.4_1_220px] ${logOpen ? "@3xl:hidden" : ""}`}>
+                <p className={`hidden items-center gap-1.5 text-[13px] font-semibold @3xl:flex ${badgeColor}`}>
+                  {dueLine}
+                </p>
+                {showNote && (
+                  <p className="truncate text-[13px] text-ink-2 @3xl:whitespace-pre-wrap @3xl:break-words">
+                    {person.followUpRemarks}
+                  </p>
+                )}
+              </div>
+
+              {onArchive && (
+                <Button
+                  variant="outline"
+                  onClick={() => onArchive(person)}
+                  disabled={busy}
+                  title="Archive"
+                  aria-label={`Archive ${person.name}`}
+                  className="w-11 shrink-0 px-0! @3xl:order-3"
+                >
+                  {isArchiving
+                    ? <span className={spinnerClass} />
+                    : <FiArchive size={18} aria-hidden="true" />}
+                </Button>
+              )}
+
+              {onToggle && (
+                <Button
+                  variant={expanded ? "soft" : "outline"}
+                  onClick={onToggle}
+                  disabled={busy}
+                  title="Log follow-up"
+                  aria-label={`Log follow-up for ${person.name}`}
+                  aria-expanded={expanded}
+                  className="w-11 shrink-0 px-0! @3xl:order-2"
+                >
+                  <FiEdit3 size={18} aria-hidden="true" />
+                </Button>
+              )}
+            </div>
+          )}
         </div>
-      )}
+
+        {logOpen && (
+          <div className="flex flex-col gap-3.5 bg-tint px-4 pb-[18px] pt-4">
+            <Field label="What to talk about next time">
+              <textarea
+                value={draft.followUpRemarks}
+                onChange={(e) => setDraft("followUpRemarks", e.target.value)}
+                rows={2}
+                className={`${panelInputClass} resize-y py-2.5`}
+              />
+            </Field>
+
+            <div className="flex flex-wrap items-end gap-x-2.5 gap-y-3.5 @3xl:gap-3.5">
+              <Field label="Next follow-up" className="min-w-0 flex-1 @3xl:flex-[1_1_180px]">
+                <input
+                  type="date"
+                  value={draft.scheduledFollowUpAt}
+                  onChange={(e) => setDraft("scheduledFollowUpAt", e.target.value)}
+                  className={`${panelInputClass} h-11 min-w-0`}
+                />
+              </Field>
+              <Field label="Then every (days)" className="w-32 shrink-0 @3xl:w-auto @3xl:flex-[0_1_140px]">
+                <input
+                  type="number"
+                  min="1"
+                  value={draft.followUpDays}
+                  onChange={(e) => setDraft("followUpDays", e.target.value)}
+                  placeholder="None"
+                  className={`${panelInputClass} h-11`}
+                />
+              </Field>
+              {/* Narrow: forces the buttons onto their own line. Wide: pushes them to the right. */}
+              <span aria-hidden="true" className="basis-full @3xl:flex-1 @3xl:basis-0" />
+              <button
+                type="button"
+                onClick={onNavigate}
+                className="order-last inline-flex min-h-11 w-full items-center justify-center font-semibold text-brand hover:text-navy @3xl:order-none @3xl:w-auto"
+              >
+                Open full profile
+              </button>
+              <Button
+                variant="outline"
+                onClick={() => onSaveLog(person, draft, false)}
+                disabled={busy}
+                className="flex-1 @3xl:flex-none"
+              >
+                Save only
+              </Button>
+              <Button
+                onClick={() => onSaveLog(person, draft, true)}
+                disabled={busy}
+                className="flex-2 @3xl:flex-none @3xl:px-[18px]!"
+              >
+                {isLogging ? <span className={spinnerClass} /> : <FiCheck size={17} strokeWidth={2.4} aria-hidden="true" />}
+                Save and mark followed up
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

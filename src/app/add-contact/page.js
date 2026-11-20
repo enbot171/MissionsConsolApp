@@ -6,15 +6,21 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { addPerson, getCGsByTeam, getCoreTeamsByTeam } from "@/lib/firestore";
 import PageShell from "@/components/PageShell";
+import { Button, Chip, Field } from "@/components/ui";
 import { CONTACT_TYPES, SOURCES, CONTACT_ROLES } from "@/config/app";
+import { FiAlertCircle, FiCheck } from "react-icons/fi";
 
 const EXCLUSIVE_ROLES = ["Contact", "Disciple"];
 
-const roleColors = {
-  Contact: "bg-blue-500", Disciple: "bg-emerald-500", CGL: "bg-violet-500",
-};
+const FORM_ID = "add-contact-form";
 
-const MINISTRY_COLORS = ["bg-pink-500", "bg-cyan-500", "bg-amber-500", "bg-violet-500", "bg-emerald-500", "bg-orange-500"];
+const TABS = [["quick", "Quick"], ["full", "Full"], ["no-contact", "No contact"]];
+
+const STATUS_FIELDS = [
+  { key: "gospelShared", label: "Gospel shared" },
+  { key: "prayed", label: "Prayed" },
+  { key: "saved", label: "Saved" },
+];
 
 export default function AddContact() {
   return (
@@ -112,234 +118,289 @@ function AddContactInner() {
 
   if (loading) return null;
 
+  const submitLabel = saving ? "Saving…" : tab === "no-contact" ? "Save (no contact)" : "Add contact";
+  // The two "required" messages also show under their own field.
+  const nameError = error === "Name is required." ? error : "";
+  const contactError = error === "Contact info is required." ? error : "";
+  const isCoreTeam = form.roles.includes("Core Team");
+
+  // Phones give the name a full row above the grid; laptops keep it in the grid.
+  const nameField = <TextField label="Name (required)" className="col-span-2 md:col-span-1" value={form.name} onChange={(v) => set("name", v)} placeholder="Full name" error={nameError} />;
+  const contactTypeField = <TextField label="Contact type" value={form.contactType} onChange={(v) => set("contactType", v)} select={CONTACT_TYPES} placeholder="Select type" />;
+  const contactField = <TextField label="Contact info (required)" value={form.contact} onChange={(v) => set("contact", v)} placeholder="Handle / number" error={contactError} />;
+  const dateField = <TextField label="Date met" type="date" value={form.metOn} onChange={(v) => set("metOn", v)} />;
+  const metAtField = <TextField label="Met at" value={form.metAt} onChange={(v) => set("metAt", v)} placeholder="Where you met" />;
+  const remarksFields = (
+    <>
+      <TextField label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes" />
+      <TextField label="Follow-up remarks" value={form.followUpRemarks} onChange={(v) => set("followUpRemarks", v)} textarea placeholder="What to follow up on" />
+    </>
+  );
+  const statusPanel = (
+    <Panel title="Status" tight>
+      {STATUS_FIELDS.map(({ key, label }) => (
+        <SwitchRow key={key} label={label} checked={form[key]} onToggle={() => set(key, !form[key])} />
+      ))}
+    </Panel>
+  );
+
   return (
-    <PageShell title="Add Contact">
-      <form onSubmit={handleSubmit} className="space-y-3">
-
-        {/* Tab toggle */}
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
-          {[["quick", "Quick"], ["full", "Full"], ["no-contact", "No Contact"]].map(([val, label]) => (
-            <button
-              key={val}
-              type="button"
-              onClick={() => { setTab(val); setError(""); }}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                tab === val ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── QUICK TAB ── */}
-        {tab === "quick" && (
-          <>
-            <Card>
-              <Field label="Name *" value={form.name} onChange={(v) => set("name", v)} placeholder="Full name" />
-              <Field label="Contact Type" value={form.contactType} onChange={(v) => set("contactType", v)} select={CONTACT_TYPES} placeholder="Select type" />
-              <Field label="Contact Info *" value={form.contact} onChange={(v) => set("contact", v)} placeholder="Handle / number" />
-              <Field label="Date Met" type="date" value={form.metOn} onChange={(v) => set("metOn", v)} />
-              <Field label="Met At" value={form.metAt} onChange={(v) => set("metAt", v)} placeholder="Where you met" />
-              <div className="space-y-1">
-                <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
-                <Field label="Follow Up Remarks" value={form.followUpRemarks} onChange={(v) => set("followUpRemarks", v)} textarea placeholder="What to follow up on…" />
-              </div>
-            </Card>
-
-            <Card title="Status">
-              {[
-                { key: "gospelShared", label: "Gospel Shared" },
-                { key: "prayed", label: "Prayed" },
-                { key: "saved", label: "Saved" },
-              ].map(({ key, label }) => (
-                <StatusRow key={key} label={label} checked={form[key]} onToggle={() => set(key, !form[key])} />
-              ))}
-            </Card>
-          </>
-        )}
-
-        {/* ── FULL TAB ── */}
-        {tab === "full" && (
-          <>
-            <Card>
-              <Field label="Name *" value={form.name} onChange={(v) => set("name", v)} placeholder="Full name" />
-              <Field label="Contact Type" value={form.contactType} onChange={(v) => set("contactType", v)} select={CONTACT_TYPES} placeholder="Select type" />
-              <Field label="Contact Info *" value={form.contact} onChange={(v) => set("contact", v)} placeholder="Handle / number" />
-              <Field label="Source" value={form.source} onChange={(v) => set("source", v)} select={SOURCES} placeholder="Select source" />
-              <Field label="Age" type="number" value={form.age} onChange={(v) => set("age", v)} placeholder="Age" />
-              <Field label="Address" value={form.address} onChange={(v) => set("address", v)} placeholder="Address" />
-              <Field label="Date Met" type="date" value={form.metOn} onChange={(v) => set("metOn", v)} />
-              <Field label="Met At" value={form.metAt} onChange={(v) => set("metAt", v)} placeholder="Where you met" />
-              <Field label="CG" value={form.cgId} onChange={(v) => set("cgId", v)}
-                select={cgs.map((c) => ({ value: c.id, label: c.name }))} placeholder="No CG" />
-              <div className="space-y-1">
-                <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
-                <Field label="Follow Up Remarks" value={form.followUpRemarks} onChange={(v) => set("followUpRemarks", v)} textarea placeholder="What to follow up on…" />
-              </div>
-            </Card>
-
-            <Card title="Status">
-              {[
-                { key: "gospelShared", label: "Gospel Shared" },
-                { key: "prayed", label: "Prayed" },
-                { key: "saved", label: "Saved" },
-              ].map(({ key, label }) => (
-                <StatusRow key={key} label={label} checked={form[key]} onToggle={() => set(key, !form[key])} />
-              ))}
-            </Card>
-
-            <Card title="Role">
-              <div className="flex flex-wrap gap-2">
-                {CONTACT_ROLES.map((r) => (
-                  <Chip key={r} label={r} active={form.roles.includes(r)} color={roleColors[r]} onToggle={() => toggleRole(r)} />
-                ))}
-              </div>
-            </Card>
-
-            <Card title="Core Team">
-              <div
-                onClick={() => {
-                  const isCT = form.roles.includes("Core Team");
-                  const newRoles = isCT
-                    ? form.roles.filter((r) => r !== "Core Team")
-                    : [...form.roles, "Core Team"];
-                  if (isCT) {
-                    setForm((f) => ({ ...f, roles: newRoles, ministries: [] }));
-                  } else {
-                    set("roles", newRoles);
-                  }
-                }}
-                className={`flex justify-between items-center rounded-xl px-3.5 py-3 cursor-pointer transition-all border ${
-                  form.roles.includes("Core Team")
-                    ? "bg-orange-50 border-orange-200 text-orange-700"
-                    : "bg-gray-50 border-gray-200 text-gray-700"
-                }`}
-              >
-                <span className="text-sm font-semibold">Core Team Member</span>
-                <span className={`text-base font-bold ${form.roles.includes("Core Team") ? "text-orange-500" : "text-gray-400"}`}>
-                  {form.roles.includes("Core Team") ? "✓" : "○"}
-                </span>
-              </div>
-              {form.roles.includes("Core Team") && (
-                <div className="mt-3">
-                  <p className="text-xs font-semibold text-gray-500 mb-2">Ministry Team</p>
-                  <div className="flex flex-wrap gap-2">
-                    {coreTeams.map((t, i) => (
-                      <Chip
-                        key={t.id}
-                        label={t.name}
-                        active={form.ministries.includes(t.name)}
-                        color={MINISTRY_COLORS[i % MINISTRY_COLORS.length]}
-                        onToggle={() => {
-                          const cur = form.ministries;
-                          set("ministries", cur.includes(t.name) ? cur.filter((x) => x !== t.name) : [...cur, t.name]);
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Card>
-          </>
-        )}
-
-        {/* ── NO CONTACT TAB ── */}
-        {tab === "no-contact" && (
-          <>
-            <Card>
-              <p className="text-xs text-gray-500">For people you spoke to but didn't get contact info from.</p>
-              <Field label="Name *" value={form.name} onChange={(v) => set("name", v)} placeholder="Full name" />
-              <Field label="Date Met" type="date" value={form.metOn} onChange={(v) => set("metOn", v)} />
-              <div className="space-y-1">
-                <Field label="Remarks" value={form.description} onChange={(v) => set("description", v)} textarea placeholder="Notes…" />
-                <Field label="Follow Up Remarks" value={form.followUpRemarks} onChange={(v) => set("followUpRemarks", v)} textarea placeholder="What to follow up on…" />
-              </div>
-            </Card>
-
-            <Card title="Status">
-              {[
-                { key: "gospelShared", label: "Gospel Shared" },
-                { key: "prayed", label: "Prayed" },
-                { key: "saved", label: "Saved" },
-              ].map(({ key, label }) => (
-                <StatusRow key={key} label={label} checked={form[key]} onToggle={() => set(key, !form[key])} />
-              ))}
-            </Card>
-          </>
-        )}
+    <PageShell
+      title="Add contact"
+      backHref="/"
+      backLabel="Home"
+      rightAction={
+        <span className="hidden md:flex">
+          <Button type="submit" form={FORM_ID} disabled={saving} aria-busy={saving || undefined} className="px-5">{submitLabel}</Button>
+        </span>
+      }
+      bottomBar={
+        <Button type="submit" form={FORM_ID} size="lg" className="flex-1" disabled={saving} aria-busy={saving || undefined}>{submitLabel}</Button>
+      }
+    >
+      <form id={FORM_ID} onSubmit={handleSubmit} className="flex flex-col gap-3 md:gap-[18px]">
 
         {error && (
-          <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
-            <p className="text-red-600 text-sm text-center">{error}</p>
+          <div role="alert" className="flex items-center gap-2.5 rounded-[14px] bg-danger-soft px-3.5 py-3 text-sm font-medium text-danger-ink">
+            <FiAlertCircle size={18} className="shrink-0" aria-hidden="true" />
+            <span>{error}</span>
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full py-3.5 bg-linear-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 hover:opacity-90 disabled:opacity-50 transition-opacity"
-        >
-          {saving ? "Saving…" : tab === "no-contact" ? "Save (No Contact)" : "Add Contact"}
-        </button>
+        {/* Tab toggle */}
+        <div className="flex flex-col gap-3.5 md:flex-row md:flex-wrap md:items-center">
+          <div role="tablist" aria-label="Form type" className="flex gap-1 rounded-[14px] bg-fill p-1">
+            {TABS.map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                role="tab"
+                aria-selected={tab === val}
+                onClick={() => { setTab(val); setError(""); }}
+                className={`h-10 flex-1 rounded-[10px] px-2 text-sm font-semibold transition-colors md:h-9 md:flex-none md:px-[18px] ${
+                  tab === val ? "bg-white text-ink shadow-[0_1px_3px_rgb(20_30_60/0.12)]" : "text-muted hover:text-ink"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="hidden text-[13px] text-muted md:inline">
+            Quick keeps to the essentials. No contact is for people you spoke to but did not get contact info from.
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-start md:gap-4">
+
+          {/* ── QUICK TAB ── */}
+          {tab === "quick" && (
+            <>
+              <Details>
+                <FieldGrid>
+                  {nameField}
+                  {contactTypeField}
+                  {contactField}
+                  {dateField}
+                  {metAtField}
+                </FieldGrid>
+                {remarksFields}
+              </Details>
+
+              <Side>{statusPanel}</Side>
+            </>
+          )}
+
+          {/* ── FULL TAB ── */}
+          {tab === "full" && (
+            <>
+              <Details>
+                <FieldGrid>
+                  {nameField}
+                  {contactTypeField}
+                  {contactField}
+                  <TextField label="Source" value={form.source} onChange={(v) => set("source", v)} select={SOURCES} placeholder="Select source" />
+                  <TextField label="Age" type="number" value={form.age} onChange={(v) => set("age", v)} placeholder="Age" />
+                  <TextField label="Address" value={form.address} onChange={(v) => set("address", v)} placeholder="Address" />
+                  {dateField}
+                  {metAtField}
+                  <TextField label="CG" value={form.cgId} onChange={(v) => set("cgId", v)}
+                    select={cgs.map((c) => ({ value: c.id, label: c.name }))} placeholder="No CG" />
+                </FieldGrid>
+                {remarksFields}
+              </Details>
+
+              <Side>
+                {statusPanel}
+
+                <Panel title="Role">
+                  <div role="group" aria-label="Role" className="flex flex-wrap gap-2">
+                    {CONTACT_ROLES.map((r) => (
+                      <CheckChip key={r} label={r} active={form.roles.includes(r)} onToggle={() => toggleRole(r)} />
+                    ))}
+                  </div>
+                </Panel>
+
+                <Panel title="Core Team">
+                  <SwitchRow
+                    label="Core Team member"
+                    strong
+                    checked={isCoreTeam}
+                    onToggle={() => {
+                      const isCT = form.roles.includes("Core Team");
+                      const newRoles = isCT
+                        ? form.roles.filter((r) => r !== "Core Team")
+                        : [...form.roles, "Core Team"];
+                      if (isCT) {
+                        setForm((f) => ({ ...f, roles: newRoles, ministries: [] }));
+                      } else {
+                        set("roles", newRoles);
+                      }
+                    }}
+                  />
+                  {isCoreTeam && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[13px] text-muted">Ministry team</p>
+                      <div role="group" aria-label="Ministry team" className="flex flex-wrap gap-2">
+                        {coreTeams.map((t) => (
+                          <MinistryChip
+                            key={t.id}
+                            label={t.name}
+                            active={form.ministries.includes(t.name)}
+                            onToggle={() => {
+                              const cur = form.ministries;
+                              set("ministries", cur.includes(t.name) ? cur.filter((x) => x !== t.name) : [...cur, t.name]);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Panel>
+              </Side>
+            </>
+          )}
+
+          {/* ── NO CONTACT TAB ── */}
+          {tab === "no-contact" && (
+            <>
+              <Details hint="For people you spoke to but didn't get contact info from.">
+                <FieldGrid>
+                  {nameField}
+                  {dateField}
+                </FieldGrid>
+                {remarksFields}
+              </Details>
+
+              <Side>{statusPanel}</Side>
+            </>
+          )}
+        </div>
       </form>
     </PageShell>
   );
 }
 
-function Card({ title, children }) {
+// The main fields: flat on phones, a card on laptops.
+function Details({ hint, children }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
-      {title && <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">{title}</p>}
+    <section className="flex min-w-0 flex-col gap-3 md:flex-[1.5_1_400px] md:gap-3.5 md:rounded-3xl md:bg-white md:px-[22px] md:pb-[22px] md:pt-5 md:shadow-card">
+      <h2 className="hidden text-[17px] font-bold tracking-[-0.015em] md:block">Details</h2>
+      {hint && <p className="text-[13px] text-muted md:-mt-2">{hint}</p>}
       {children}
-    </div>
+    </section>
   );
 }
 
-const inputCls = "w-full min-w-0 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white transition-colors";
-
-function Field({ label, value, onChange, type = "text", select, placeholder, textarea }) {
-  return (
-    <div className="space-y-1 min-w-0 overflow-hidden">
-      <label className="text-xs font-semibold text-gray-700">{label}</label>
-      {textarea ? (
-        <textarea value={value ?? ""} onChange={(e) => onChange(e.target.value)} rows={3} placeholder={placeholder} className={`${inputCls} resize-none`} />
-      ) : select ? (
-        <div className="relative">
-          <select value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={`${inputCls} appearance-none pr-9`}>
-            {placeholder && <option value="">{placeholder}</option>}
-            {select.map((o) => typeof o === "string"
-              ? <option key={o} value={o}>{o}</option>
-              : <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" width="12" height="12" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-            <path d="M5 8l5 5 5-5H5z" />
-          </svg>
-        </div>
-      ) : (
-        <input type={type} value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={inputCls} />
-      )}
-    </div>
-  );
+function FieldGrid({ children }) {
+  return <div className="grid grid-cols-2 items-start gap-3 md:gap-3.5">{children}</div>;
 }
 
-function StatusRow({ label, checked, onToggle }) {
-  return (
-    <div onClick={onToggle} className={`flex justify-between items-center rounded-xl px-3.5 py-3 cursor-pointer transition-all border ${
-      checked ? "bg-emerald-50 border-emerald-200" : "bg-gray-50 border-gray-200"
-    }`}>
-      <span className={`text-sm font-semibold ${checked ? "text-emerald-700" : "text-gray-700"}`}>{label}</span>
-      <span className={`text-base font-bold ${checked ? "text-emerald-500" : "text-gray-500"}`}>{checked ? "✓" : "○"}</span>
-    </div>
-  );
+function Side({ children }) {
+  return <div className="flex min-w-0 flex-col gap-3 md:flex-[1_1_300px] md:gap-4">{children}</div>;
 }
 
-function Chip({ label, active, color, onToggle }) {
+// Tinted block on phones, white card on laptops. `tight` is the Status card,
+// whose rows sit closer together than the other cards' contents.
+function Panel({ title, tight = false, children }) {
   return (
-    <button type="button" onClick={onToggle}
-      className={`px-3 py-1.5 rounded-xl text-sm font-semibold border transition-all ${
-        active ? `${color} text-white border-transparent shadow-sm` : "bg-white text-gray-700 border-gray-200"
+    <section
+      className={`flex flex-col rounded-[20px] bg-tint px-4 py-3 md:rounded-3xl md:bg-white md:px-[22px] md:py-5 md:shadow-card ${
+        tight ? "md:gap-1" : "gap-3 md:gap-3.5"
       }`}
-    >{label}</button>
+    >
+      <h2 className={`text-[17px] font-bold tracking-[-0.015em] ${tight ? "mb-0.5 md:mb-1.5" : ""}`}>{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+// Sized per board: 48px tall with 16px text on phones, 44px with 15px on laptops.
+const CONTROL =
+  "w-full min-w-0 rounded-[14px] bg-white text-base font-normal text-ink ring-1 placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand md:text-[15px]";
+
+function TextField({ label, value, onChange, type = "text", select, placeholder, textarea, error, className = "" }) {
+  const control = `${CONTROL} ${error ? "ring-danger-ink" : "ring-line"}`;
+  return (
+    <Field label={label} error={error} className={`min-w-0 ${className}`}>
+      {textarea ? (
+        <textarea value={value ?? ""} onChange={(e) => onChange(e.target.value)} rows={2} placeholder={placeholder} className={`${control} resize-y px-3.5 py-2.5 md:min-h-[88px]`} />
+      ) : select ? (
+        <select value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={`${control} h-12 pl-2.5 pr-10 md:h-11 md:pl-3`}>
+          {placeholder && <option value="">{placeholder}</option>}
+          {select.map((o) => typeof o === "string"
+            ? <option key={o} value={o}>{o}</option>
+            : <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      ) : (
+        <input type={type} value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-invalid={error ? true : undefined}
+          className={`${control} h-12 md:h-11 ${type === "date" ? "px-3 md:px-3.5" : "px-3.5"}`} />
+      )}
+    </Field>
+  );
+}
+
+// The whole row is the switch, so the label is as easy to hit as the track.
+function SwitchRow({ label, checked, onToggle, strong = false }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onToggle}
+      className="flex min-h-12 w-full items-center justify-between gap-3 text-left md:min-h-11"
+    >
+      <span className={strong ? "font-semibold" : "font-medium"}>{label}</span>
+      <span
+        aria-hidden="true"
+        className={`flex h-7 w-[46px] shrink-0 rounded-full p-[3px] transition-colors md:w-12 ${checked ? "justify-end bg-brand" : "justify-start bg-muted/70"}`}
+      >
+        <span className="h-5.5 w-5.5 rounded-full bg-white shadow-[0_1px_3px_rgb(20_30_60/0.25)]" />
+      </span>
+    </button>
+  );
+}
+
+function CheckChip({ label, active, onToggle }) {
+  return (
+    <Chip active={active} onClick={onToggle} className="inline-flex items-center gap-1.5">
+      {active && <FiCheck size={15} strokeWidth={2.6} aria-hidden="true" />}
+      {label}
+    </Chip>
+  );
+}
+
+// Ministry teams are the smaller, warm-tinted chips on the board.
+function MinistryChip({ label, active, onToggle }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onToggle}
+      className={`h-[38px] rounded-full px-3.5 text-sm font-semibold transition-colors ${
+        active ? "bg-warn-soft text-warn-ink" : "bg-fill text-ink hover:bg-line-soft"
+      }`}
+    >
+      {label}
+    </button>
   );
 }

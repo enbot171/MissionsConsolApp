@@ -1,12 +1,13 @@
-import { Geist } from "next/font/google";
+import { Schibsted_Grotesk } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { SidebarProvider } from "@/context/SidebarContext";
 import { FollowUpCountProvider } from "@/context/FollowUpCountContext";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const schibsted = Schibsted_Grotesk({
+  variable: "--font-schibsted",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata = {
@@ -16,8 +17,8 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-gray-50">
+    <html lang="en" className={`${schibsted.variable} h-full antialiased`}>
+      <body className="min-h-full flex flex-col bg-white font-sans text-ink">
         <AuthProvider>
           <SidebarProvider>
             <FollowUpCountProvider>{children}</FollowUpCountProvider>

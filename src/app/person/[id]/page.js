@@ -6,11 +6,11 @@ import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPerson, updatePerson, getCGsByTeam, getUsersByTeam, getCoreTeamsByTeam, getMeetupsByPerson } from "@/lib/firestore";
 import { Timestamp } from "firebase/firestore";
 import PageShell from "@/components/PageShell";
-import { FaArchive } from "react-icons/fa";
-import { FiCalendar } from "react-icons/fi";
-import { FaInstagram } from "react-icons/fa";
-import { contactLink } from "@/lib/contactLink";
-import { CONTACT_TYPES, SOURCES, CONTACT_ROLES, MILESTONES, ROLE_STYLES } from "@/config/app";
+import Spinner from "@/components/Spinner";
+import { Avatar, Button, Card, Chip, Field, RoleTag, inputClass } from "@/components/ui";
+import { FiAlertCircle, FiArchive, FiCalendar, FiCheck, FiPlus, FiUserX } from "react-icons/fi";
+import { ContactHandle, ContactTypeTag } from "@/components/ContactActions";
+import { CONTACT_TYPES, SOURCES, CONTACT_ROLES, MILESTONES } from "@/config/app";
 
 export default function PersonView() {
   const { id } = useParams();
@@ -23,12 +23,11 @@ export default function PersonView() {
   const [coreTeams, setCoreTeams] = useState([]);
   const [meetups, setMeetups] = useState([]);
   const [fetching, setFetching] = useState(true);
-  const [tab, setTab] = useState("info");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
 
-  // Single unified form state across all tabs
+  // Single unified form state across all sections
   const [form, setForm] = useState(null);
 
   useEffect(() => {
@@ -50,6 +49,17 @@ export default function PersonView() {
   }, [id, profile?.teamId]);
 
   const set = useCallback((k, v) => setForm((f) => ({ ...f, [k]: v })), []);
+
+  // Closing or reloading the tab with unsaved edits asks first.
+  const hasUnsaved = Boolean(
+    person && form && Object.keys(form).some((k) => JSON.stringify(form[k]) !== JSON.stringify(person[k]))
+  );
+  useEffect(() => {
+    if (!hasUnsaved) return;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsaved]);
 
   const showSaved = () => {
     setSaved(true);
@@ -80,7 +90,8 @@ export default function PersonView() {
         milestones: form.milestones || {},
         progressRemarks: form.progressRemarks || "",
         followUpRemarks: form.followUpRemarks || "",
-        ...(form.followUpDays != null ? { followUpDays: parseInt(form.followUpDays) || null } : {}),
+        // Always sent, so clearing the interval really clears it.
+        followUpDays: parseInt(form.followUpDays) || null,
         scheduledFollowUpAt: form.scheduledFollowUpAt instanceof Date
           ? Timestamp.fromDate(form.scheduledFollowUpAt)
           : (form.scheduledFollowUpAt ?? null),
@@ -126,114 +137,168 @@ export default function PersonView() {
     setSaving(false);
   };
 
-  if (authLoading || fetching) {
+  if (authLoading || fetching) return <Spinner fullScreen />;
+  if (!person || !form) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-7 h-7 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-      </div>
+      <PageShell title={<span className="sr-only">Person not found</span>} backHref="/people" backLabel="My people">
+        <div className="flex flex-col items-center gap-1.5 rounded-3xl bg-white px-6 py-14 text-center ring-1 ring-line-soft">
+          <span aria-hidden="true" className="inline-flex h-14 w-14 items-center justify-center rounded-[18px] bg-brand-soft text-brand">
+            <FiUserX size={26} />
+          </span>
+          <p className="mt-1.5 text-[17px] font-bold tracking-[-0.015em] text-ink">Person not found.</p>
+        </div>
+      </PageShell>
     );
   }
-  if (!person || !form) return <div className="p-8 text-center text-gray-600">Person not found.</div>;
+
+  // Anything in the form that no longer matches what was last loaded or saved.
+  const dirty = hasUnsaved;
+  const discard = () => setForm(person);
+
+  const roles = form.roles || [];
+  const isCoreTeam = roles.includes("Core Team");
+  const milestonesDone = MILESTONES.filter((m) => form.milestones?.[m]).length;
+  const archiveLabel = person.archived ? "Unarchive" : "Archive";
+  const onArchive = person.archived ? handleUnarchive : handleArchive;
+  const saveLabel = saving ? "Saving…" : "Save changes";
+  const scheduleMeeting = () => router.push(`/calendar?scheduleFor=${id}&name=${encodeURIComponent(person.name)}`);
+
+  // Heading subline: how to reach them, then when and where they were met.
+  const now = new Date();
+  const metDate = toDate(person.createdAt);
+  const met = metDate
+    ? `Met ${shortDate(metDate, now)}${person.metAt ? ` at ${person.metAt}` : ""}`
+    : person.metAt ? `Met at ${person.metAt}` : "";
+  const hasContactLine = Boolean(person.contactType || person.contact || met);
+  const lastFollowedUp = toDate(form.lastFollowedUpAt);
 
   return (
     <PageShell
-      title={person.name}
+      title={
+        // On a phone the heading always takes the whole row (w-screen capped at
+        // the row width), so the gap under it is the same for every name.
+        <span className="flex items-center gap-3.5 max-md:w-screen max-md:max-w-full md:gap-4">
+          <Avatar
+            name={person.name}
+            size="lg"
+            className="font-bold! tracking-normal md:h-16 md:w-16 md:rounded-[20px] md:text-[22px]"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2 text-[26px] leading-[1.15] md:gap-2.5 md:text-[32px]">
+              {person.name}
+              {(person.roles || []).map((r) => <RoleTag key={r} role={r} className={TAG_SIZE} />)}
+              {person.archived && (
+                <span className={`inline-flex h-6 items-center whitespace-nowrap rounded-full bg-line-soft px-2.5 text-[12.5px] font-semibold text-ink-2 ${TAG_SIZE}`}>
+                  Archived
+                </span>
+              )}
+            </span>
+            {hasContactLine && (
+              <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-normal leading-normal tracking-normal text-muted md:gap-x-2.5 md:text-[15px]">
+                <ContactTypeTag contactType={person.contactType} />
+                <ContactHandle contactType={person.contactType} contact={person.contact} />
+                {met && <span className="basis-full md:basis-auto">{met}</span>}
+              </span>
+            )}
+          </span>
+        </span>
+      }
       backHref="/people"
+      backLabel="My people"
       rightAction={
-        <button
-          onClick={person.archived ? handleUnarchive : handleArchive}
-          disabled={saving}
-          className={`flex flex-col items-center active:opacity-70 ${person.archived ? "text-blue-500" : "text-red-500"}`}
-        >
-          <FaArchive size={18} />
-          <span className="text-[10px] font-semibold mt-0.5">{person.archived ? "Unarchive" : "Archive"}</span>
-        </button>
+        <div className="hidden flex-wrap items-center gap-2.5 md:flex">
+          {person.archived ? (
+            <Button variant="outline" onClick={onArchive} disabled={saving}>{archiveLabel}</Button>
+          ) : (
+            <Button variant="outline" className="w-11 px-0!" onClick={onArchive} disabled={saving} title="Archive" aria-label={`Archive ${person.name}`}>
+              <FiArchive size={18} aria-hidden="true" />
+            </Button>
+          )}
+          <Button variant={dirty ? "primary" : "outline"} className="px-5" onClick={handleSave} disabled={saving || !dirty} aria-busy={saving}>
+            {dirty || saving ? saveLabel : "Saved"}
+          </Button>
+        </div>
+      }
+      bottomBar={
+        <Button size="lg" className="flex-1" onClick={handleSave} disabled={saving} aria-busy={saving}>{saveLabel}</Button>
       }
     >
-      {/* Avatar + role chips */}
-      <div className="flex flex-col items-center mb-5 pt-2">
-        <div className="w-20 h-20 rounded-2xl bg-linear-to-br from-blue-400 to-indigo-500 flex items-center justify-center shadow-md shadow-blue-300/40 mb-3">
-          <span className="text-white text-3xl font-bold">{person.name?.charAt(0).toUpperCase() || "?"}</span>
-        </div>
-        <div className="flex flex-wrap gap-1.5 justify-center">
-          {(person.roles || []).map((r) => (
-            <span key={r} className={`text-xs px-2.5 py-1 rounded-full font-semibold ${ROLE_STYLES[r] || "bg-gray-100 text-gray-700"}`}>{r}</span>
-          ))}
-          {person.archived && <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-gray-100 text-gray-700">Archived</span>}
-        </div>
-        <p className="text-gray-600 text-sm mt-1">
-          {person.contactType ? `${person.contactType} - ${person.contact}` : person.contact}
-        </p>
-        {(() => {
-          const ig = contactLink(person.contactType, person.contact);
-          if (!ig) return null;
-          return (
-            <div className="flex gap-2 mt-2.5">
-              <a
-                href={ig.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-pink-200 bg-pink-50 text-pink-700 text-xs font-semibold hover:bg-pink-100 transition-colors"
-              >
-                <FaInstagram size={13} /> Profile
-              </a>
-            </div>
-          );
-        })()}
+      {/* Phone only: the two quick actions under the heading. The negative margin
+          takes back the empty second row of the shell's heading. */}
+      <div className="-mt-3.5 mb-3.5 flex gap-2 md:hidden">
+        <Button variant="soft" className="flex-1" onClick={scheduleMeeting}>
+          <FiPlus size={17} strokeWidth={2.2} aria-hidden="true" /> Schedule meeting
+        </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-4">
-        {["info", "progress", "network", "meetings"].map((t) => (
-          <button
-            key={t}
-            onClick={() => { setTab(t); setError(""); }}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
-              tab === t ? "bg-white text-gray-900 shadow-sm" : "text-gray-700"
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-2.5 mb-4">
-          <p className="text-red-600 text-sm text-center">{error}</p>
+      {(error || saved) && (
+        <div className="sticky top-3 z-30 mb-3.5 flex flex-col gap-2 md:mb-[18px]">
+          {error && (
+            <Notice role="alert" className="bg-danger-soft text-danger-ink">
+              <FiAlertCircle size={18} className="shrink-0" aria-hidden="true" />
+              <span>{error}</span>
+            </Notice>
+          )}
+          {saved && (
+            <Notice role="status" className="bg-ok-soft text-ok-ink">
+              <FiCheck size={18} className="shrink-0" aria-hidden="true" />
+              <span>Changes saved.</span>
+            </Notice>
+          )}
         </div>
       )}
 
-      {/* ── INFO TAB ── */}
-      {tab === "info" && (
-        <div className="space-y-3">
-          <Card>
-            <Field label="Name" value={form.name} onChange={(v) => set("name", v)} />
-            <Field label="Contact Type" value={form.contactType} onChange={(v) => set("contactType", v)} select={CONTACT_TYPES} />
-            <Field label="Contact Info" value={form.contact} onChange={(v) => set("contact", v)} />
-            <Field label="Source" value={form.source || ""} onChange={(v) => set("source", v)} select={SOURCES} />
-            <Field label="Age" type="number" value={form.age || ""} onChange={(v) => set("age", v ? parseInt(v) : null)} />
-            <Field label="Address" value={form.address || ""} onChange={(v) => set("address", v)} />
-            <Field
-              label="Date Met"
-              type="date"
-              value={form.createdAt?.toDate ? form.createdAt.toDate().toISOString().split("T")[0] : form.createdAt instanceof Date ? form.createdAt.toISOString().split("T")[0] : ""}
-              onChange={(v) => set("createdAt", v ? new Date(v) : form.createdAt)}
+      {/* Two columns on a laptop. On a phone the cards are one list, in the order set by order-N. */}
+      <div className="flex flex-col gap-3.5 md:flex-row md:flex-wrap md:items-start md:gap-4">
+        <div className="contents md:flex md:min-w-0 md:flex-[1.5_1_400px] md:flex-col md:gap-4">
+          <Card className="order-5 flex flex-col gap-3 md:order-none md:gap-3.5 md:px-[22px] md:pb-[22px]">
+            <SectionTitle>Details</SectionTitle>
+            {/* Laptop reads in source order. The phone board has its own order: order-N. */}
+            <div className="grid grid-cols-2 gap-3 md:gap-3.5">
+              <TextField className="order-1 col-span-2 md:order-none md:col-span-1" label="Name" value={form.name} onChange={(v) => set("name", v)} />
+              <TextField className="order-5 md:order-none" label="Age" type="number" value={form.age || ""} onChange={(v) => set("age", v ? parseInt(v) : null)} />
+              <TextField className="order-2 md:order-none" label="Contact type" value={form.contactType} onChange={(v) => set("contactType", v)} select={CONTACT_TYPES} />
+              <TextField className="order-3 md:order-none" label="Contact info" value={form.contact} onChange={(v) => set("contact", v)} />
+              <TextField className="order-4 md:order-none" label="Source" value={form.source || ""} onChange={(v) => set("source", v)} select={SOURCES} />
+              <TextField className="order-8 col-span-2 md:order-none md:col-span-1" label="Address" value={form.address || ""} onChange={(v) => set("address", v)} />
+              <TextField
+                className="order-6 md:order-none"
+                label="Date met"
+                type="date"
+                value={form.createdAt?.toDate ? form.createdAt.toDate().toISOString().split("T")[0] : form.createdAt instanceof Date ? form.createdAt.toISOString().split("T")[0] : ""}
+                onChange={(v) => set("createdAt", v ? new Date(v) : form.createdAt)}
+              />
+              <TextField className="order-7 md:order-none" label="Met at" value={form.metAt || ""} onChange={(v) => set("metAt", v)} />
+              <TextField className="order-9 col-span-2 md:order-none" label="Remarks" value={form.description || ""} onChange={(v) => set("description", v)} textarea />
+            </div>
+          </Card>
+
+          <Card tone="soft" className="order-1 flex flex-col gap-3 md:order-none md:gap-3.5 md:px-[22px] md:pb-[22px]">
+            <div className="flex flex-wrap items-center justify-between gap-2 md:gap-2.5">
+              <SectionTitle>Follow-up</SectionTitle>
+              {lastFollowedUp && (
+                <p className="text-[13px] text-ink-2">
+                  Last followed up{" "}
+                  <span className="md:hidden">
+                    {lastFollowedUp.toLocaleDateString("en-GB", { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
+                  </span>
+                  <span className="hidden md:inline">{shortDate(lastFollowedUp, now)}</span>
+                </p>
+              )}
+            </div>
+            <TextField
+              label="Follow-up remarks"
+              value={form.followUpRemarks || ""}
+              onChange={(v) => set("followUpRemarks", v)}
+              placeholder="What to follow up on"
+              textarea
+              rows={2}
             />
-            <Field label="Met At" value={form.metAt || ""} onChange={(v) => set("metAt", v)} />
-            <Field label="Remarks" value={form.description || ""} onChange={(v) => set("description", v)} textarea />
-            <Field label="Follow Up Remarks" value={form.followUpRemarks || ""} onChange={(v) => set("followUpRemarks", v)} textarea />
-            <Field
-              label="Subsequent follow-up interval (days)"
-              type="number"
-              value={form.followUpDays ?? ""}
-              onChange={(v) => set("followUpDays", v === "" ? null : parseInt(v) || null)}
-              placeholder="None"
-            />
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-700">Scheduled follow-up</label>
-              <p className="text-[11px] text-gray-400">Optional — set a specific date to be reminded to follow up.</p>
-              <div className="flex gap-2 items-center">
+            <div className="grid grid-cols-2 gap-3 md:gap-3.5">
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <label htmlFor="scheduled-follow-up" className="text-sm font-semibold text-ink">Scheduled follow-up</label>
                 <input
+                  id="scheduled-follow-up"
                   type="date"
                   value={
                     form.scheduledFollowUpAt instanceof Date
@@ -243,47 +308,133 @@ export default function PersonView() {
                       : ""
                   }
                   onChange={(e) => set("scheduledFollowUpAt", e.target.value ? new Date(e.target.value) : null)}
-                  className="flex-1 min-w-0 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                  className={`${CONTROL} min-w-0 max-md:px-2.5`}
                 />
-                {form.scheduledFollowUpAt && (
-                  <button
-                    type="button"
-                    onClick={() => set("scheduledFollowUpAt", null)}
-                    className="text-xs text-gray-400 hover:text-gray-600 font-semibold shrink-0"
-                  >
-                    Clear
-                  </button>
-                )}
+              </div>
+              <TextField
+                label="Then every (days)"
+                type="number"
+                value={form.followUpDays ?? ""}
+                onChange={(v) => set("followUpDays", v === "" ? null : parseInt(v) || null)}
+                placeholder="None"
+              />
+            </div>
+            {/* The laptop board has no hint line, so there this row is only the Clear button. */}
+            <div className={`-mt-1.5 min-h-11 items-center justify-between gap-2.5 ${form.scheduledFollowUpAt ? "flex" : "flex md:hidden"}`}>
+              <p className="text-[13px] text-ink-2 md:hidden">Optional. Set a date to be reminded to follow up.</p>
+              {form.scheduledFollowUpAt && (
+                <button
+                  type="button"
+                  onClick={() => set("scheduledFollowUpAt", null)}
+                  className="h-11 shrink-0 px-2 text-sm font-semibold text-brand hover:text-navy md:ml-auto"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </Card>
+
+          <Card className="order-2 flex flex-col gap-1 pb-2 md:order-none md:gap-1.5 md:px-[22px] md:pb-3">
+            <div className="flex items-center justify-between gap-2.5">
+              <SectionTitle>Meetings</SectionTitle>
+              <div className="hidden md:block">
+                <Button variant="soft" onClick={scheduleMeeting}>
+                  <FiPlus size={17} strokeWidth={2.2} aria-hidden="true" /> Schedule meeting
+                </Button>
               </div>
             </div>
-            {form.lastFollowedUpAt && (
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-700">Last Followed Up</label>
-                <p className="text-sm text-gray-600">
-                  {(form.lastFollowedUpAt?.toDate ? form.lastFollowedUpAt.toDate() : new Date(form.lastFollowedUpAt))
-                    .toLocaleDateString([], { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
-                </p>
+            {meetups.length === 0 ? (
+              <div className="flex flex-col items-center gap-1.5 pb-[22px] pt-5 text-center">
+                <span aria-hidden="true" className="inline-flex h-14 w-14 items-center justify-center rounded-[18px] bg-brand-soft text-brand">
+                  <FiCalendar size={26} />
+                </span>
+                <p className="mt-1.5 text-[17px] font-bold tracking-[-0.015em] text-ink">No meetings yet</p>
+                <p className="text-sm text-muted">Schedule one above.</p>
               </div>
+            ) : (
+              meetups.map((m) => {
+                const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
+                const isPast = d < now;
+                const time = d.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true });
+                const day = d.toDateString() === now.toDateString()
+                  ? "Today"
+                  : d.getFullYear() === now.getFullYear()
+                  ? d.toLocaleDateString("en-GB", { weekday: "long" })
+                  : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+                const where = [m.location, m.notes].filter(Boolean).join(" · ");
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => router.push(`/calendar?editMeetup=${m.id}`)}
+                    className="-mx-2 flex min-h-15 items-center gap-3 rounded-2xl px-2 text-left transition-colors hover:bg-tint"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`inline-flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-[14px] leading-[1.1] ${
+                        isPast ? "bg-fill text-ink" : "bg-navy text-white"
+                      }`}
+                    >
+                      <span className={`text-[11.5px] font-semibold uppercase ${isPast ? "text-muted" : "text-nav-muted"}`}>
+                        {d.toLocaleDateString("en-GB", { month: "short" })}
+                      </span>
+                      <span className="text-base font-bold">{d.getDate()}</span>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold text-ink">{day}, {time}</span>
+                      {where && (
+                        <span className="block truncate text-[13px] text-muted md:overflow-visible md:whitespace-normal">{where}</span>
+                      )}
+                      {m.outcomeNotes && (
+                        <span className="my-1.5 block whitespace-pre-wrap border-l-2 border-ok-ink pl-2 text-[13px] italic text-ink-2">
+                          {m.outcomeNotes}
+                        </span>
+                      )}
+                    </span>
+                    {m.completed === true && <MeetingState dot="bg-ok-ink">Done</MeetingState>}
+                    {m.completed === false && <MeetingState dot="bg-warn" className="text-warn-ink">Missed</MeetingState>}
+                    {m.completed == null && !isPast && <MeetingState dot="bg-role-contact-ink">Upcoming</MeetingState>}
+                  </button>
+                );
+              })
             )}
           </Card>
+        </div>
 
-          <Card title="Roles">
-            <ChipGroup items={CONTACT_ROLES} active={form.roles || []} onToggle={(r) => {
-              const cur = form.roles || [];
-              if (cur.includes(r)) {
-                set("roles", cur.filter((x) => x !== r));
-              } else {
-                const exclusive = ["Contact", "Disciple"];
-                set("roles", exclusive.includes(r)
-                  ? [...cur.filter((x) => !exclusive.includes(x)), r]
-                  : [...cur, r]);
-              }
-            }} />
-          </Card>
-
-          <Card title="Core Team">
-            <div
-              onClick={() => {
+        <div className="contents md:flex md:min-w-0 md:flex-[1_1_300px] md:flex-col md:gap-4">
+          <Card className="order-6 flex flex-col gap-3 md:order-none md:gap-3.5 md:px-[22px]">
+            <SectionTitle>Roles</SectionTitle>
+            <div role="group" aria-label="Role" className="flex flex-wrap gap-2">
+              {CONTACT_ROLES.map((r) => {
+                const on = roles.includes(r);
+                return (
+                  <Chip
+                    key={r}
+                    active={on}
+                    className="inline-flex items-center gap-1.5"
+                    onClick={() => {
+                      const cur = form.roles || [];
+                      if (cur.includes(r)) {
+                        set("roles", cur.filter((x) => x !== r));
+                      } else {
+                        const exclusive = ["Contact", "Disciple"];
+                        set("roles", exclusive.includes(r)
+                          ? [...cur.filter((x) => !exclusive.includes(x)), r]
+                          : [...cur, r]);
+                      }
+                    }}
+                  >
+                    {on && <FiCheck size={15} strokeWidth={2.6} aria-hidden="true" />}
+                    {r}
+                  </Chip>
+                );
+              })}
+            </div>
+            <ToggleRow
+              label="Core Team member"
+              strong
+              checked={isCoreTeam}
+              onToggle={() => {
                 const isCT = (form.roles || []).includes("Core Team");
                 const newRoles = isCT
                   ? (form.roles || []).filter((r) => r !== "Core Team")
@@ -294,40 +445,44 @@ export default function PersonView() {
                   set("roles", newRoles);
                 }
               }}
-              className={`flex justify-between items-center rounded-xl px-3.5 py-3 cursor-pointer transition-all border ${
-                (form.roles || []).includes("Core Team")
-                  ? "bg-orange-50 border-orange-200 text-orange-700"
-                  : "bg-gray-50 border-gray-200 text-gray-700"
-              }`}
-            >
-              <span className="text-sm font-semibold">Core Team Member</span>
-              <span className={`text-base font-bold ${(form.roles || []).includes("Core Team") ? "text-orange-500" : "text-gray-400"}`}>
-                {(form.roles || []).includes("Core Team") ? "✓" : "○"}
-              </span>
-            </div>
-            {(form.roles || []).includes("Core Team") && (
-              <div className="mt-3">
-                <p className="text-xs font-semibold text-gray-500 mb-2">Ministry Team</p>
-                <ChipGroup items={coreTeams.map((t) => t.name)} active={form.ministries || []} onToggle={(m) => {
-                  const cur = form.ministries || [];
-                  set("ministries", cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m]);
-                }} />
+            />
+            {isCoreTeam && (
+              <div className="flex flex-col gap-2">
+                <p className="text-[13px] text-muted">Ministry team</p>
+                <div role="group" aria-label="Ministry team" className="flex flex-wrap gap-2">
+                  {coreTeams.map((t) => {
+                    const m = t.name;
+                    const on = (form.ministries || []).includes(m);
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => {
+                          const cur = form.ministries || [];
+                          set("ministries", cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m]);
+                        }}
+                        className={`h-11 rounded-full px-4 text-sm font-semibold transition-colors ${SMALL_CHIP} ${
+                          on ? "bg-warn-soft text-warn-ink" : "bg-fill text-ink hover:bg-line-soft"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </Card>
-        </div>
-      )}
 
-      {/* ── PROGRESS TAB ── */}
-      {tab === "progress" && (
-        <div className="space-y-3">
-          <Card title="Status">
+          <Card className="order-3 flex flex-col gap-0.5 pb-2.5 md:order-none md:gap-1 md:px-[22px] md:pb-5">
+            <SectionTitle className="mb-1 md:mb-1.5">Status</SectionTitle>
             {[
-              { key: "gospelShared", label: "Gospel Shared" },
+              { key: "gospelShared", label: "Gospel shared" },
               { key: "prayed", label: "Prayed" },
               { key: "saved", label: "Saved" },
             ].map(({ key, label }) => (
-              <ProgressRow
+              <ToggleRow
                 key={key}
                 label={label}
                 checked={!!form[key]}
@@ -336,44 +491,54 @@ export default function PersonView() {
             ))}
           </Card>
 
-          <Card title="Milestones">
-            <div className="grid grid-cols-2 gap-2">
+          <Card className="order-4 flex flex-col gap-3 md:order-none md:px-[22px]">
+            <div className="flex items-center justify-between gap-2.5">
+              <SectionTitle>Milestones</SectionTitle>
+              <p className="text-[13px] text-muted">{milestonesDone} of {MILESTONES.length}</p>
+            </div>
+            <div
+              role="progressbar"
+              aria-label="Milestones done"
+              aria-valuenow={milestonesDone}
+              aria-valuemin={0}
+              aria-valuemax={MILESTONES.length}
+              className="h-2 overflow-hidden rounded-full bg-line-soft"
+            >
+              <div className="h-2 rounded-full bg-brand" style={{ width: `${(milestonesDone / MILESTONES.length) * 100}%` }} />
+            </div>
+            <div role="group" aria-label="Milestones" className="flex flex-wrap gap-2">
               {MILESTONES.map((m) => (
-                <ProgressRow
+                <Chip
                   key={m}
-                  label={m}
-                  checked={!!form.milestones?.[m]}
-                  onToggle={() => set("milestones", { ...form.milestones, [m]: !form.milestones?.[m] })}
-                />
+                  active={!!form.milestones?.[m]}
+                  className={SMALL_CHIP}
+                  onClick={() => set("milestones", { ...form.milestones, [m]: !form.milestones?.[m] })}
+                >
+                  {m}
+                </Chip>
               ))}
             </div>
-          </Card>
-
-          <Card title="Progress Remarks">
-            <textarea
+            <TextField
+              label="Progress remarks"
               value={form.progressRemarks || ""}
-              onChange={(e) => set("progressRemarks", e.target.value)}
-              rows={4}
-              placeholder="Enter progress notes…"
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 resize-none"
+              onChange={(v) => set("progressRemarks", v)}
+              placeholder="Enter progress notes"
+              textarea
+              rows={2}
             />
           </Card>
-        </div>
-      )}
 
-      {/* ── NETWORK TAB ── */}
-      {tab === "network" && (
-        <div className="space-y-3">
-          <Card>
-            <Field
+          <Card className="order-7 flex flex-col gap-3 md:order-none md:gap-3.5 md:px-[22px] md:pb-[22px]">
+            <SectionTitle>Assignment</SectionTitle>
+            <TextField
               label="Connect Group"
               value={form.cgId || ""}
               onChange={(v) => set("cgId", v)}
               select={cgs.map((c) => ({ value: c.id, label: c.name }))}
               placeholder="No CG"
             />
-            <Field
-              label="Assigned To (POC)"
+            <TextField
+              label="Assigned to (POC)"
               value={form.assignedTo || ""}
               onChange={(v) => {
                 const u = users.find((u) => u.id === v);
@@ -381,173 +546,134 @@ export default function PersonView() {
               }}
               select={users.map((u) => ({ value: u.id, label: u.name }))}
             />
+            {form.cgId && (
+              <Button variant="outline" className="w-full text-warn-ink!" onClick={handleRemoveFromCG} disabled={saving}>
+                Remove from CG
+              </Button>
+            )}
           </Card>
+        </div>
+      </div>
 
-          {form.cgId && (
-            <button
-              onClick={handleRemoveFromCG}
-              disabled={saving}
-              className="w-full py-3 border border-red-200 text-red-500 font-semibold rounded-xl text-sm hover:bg-red-50 transition-colors"
-            >
-              Remove from CG
-            </button>
-          )}
+      {/* Phone only: the laptop has this button in the heading row. */}
+      {/* Laptop: edits bring up a bar that stays in view until saved or discarded. */}
+      {dirty && (
+        <div role="status" className="sticky bottom-5 z-30 mt-5 hidden items-center gap-3 rounded-2xl bg-navy py-2.5 pl-5 pr-2.5 text-white shadow-float md:flex">
+          <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full bg-warn" />
+          <span className="flex-1 font-semibold">You have unsaved changes</span>
+          <button type="button" onClick={discard} disabled={saving} className="h-11 rounded-[14px] px-4 font-semibold text-nav-muted transition-colors hover:bg-white/10 hover:text-white">
+            Discard
+          </button>
+          <button type="button" onClick={handleSave} disabled={saving} aria-busy={saving} className="h-11 rounded-[14px] bg-white px-5 font-semibold text-navy transition-colors hover:bg-brand-soft disabled:opacity-60">
+            {saveLabel}
+          </button>
         </div>
       )}
 
-      {/* ── MEETINGS TAB ── */}
-      {tab === "meetings" && (
-        <div className="space-y-3">
-          <button
-            onClick={() => router.push(`/calendar?scheduleFor=${id}&name=${encodeURIComponent(person.name)}`)}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
-          >
-            <FiCalendar size={14} />
-            Schedule Meeting
-          </button>
-          {meetups.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
-              <p className="text-sm font-semibold text-gray-700">No meetings yet</p>
-              <p className="text-xs text-gray-400 mt-1">Schedule one above.</p>
-            </div>
-          ) : (
-            meetups.map((m) => {
-              const d = m.date?.toDate ? m.date.toDate() : new Date(m.date);
-              const isPast = d < new Date();
-              return (
-                <div
-                  key={m.id}
-                  onClick={() => router.push(`/calendar?editMeetup=${m.id}`)}
-                  className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-start gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isPast ? "bg-gray-100" : "bg-blue-50"}`}>
-                    <span className={`text-sm font-bold ${isPast ? "text-gray-500" : "text-blue-600"}`}>{d.getDate()}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">
-                      {d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
-                      {" · "}
-                      {d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                    {m.location && <p className="text-xs text-gray-500 mt-0.5">{m.location}</p>}
-                    {m.notes && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{m.notes}</p>}
-                    {m.outcomeNotes && (
-                      <p className="mt-1.5 pl-2 border-l-2 border-emerald-400 text-xs text-gray-600 italic whitespace-pre-wrap">
-                        {m.outcomeNotes}
-                      </p>
-                    )}
-                  </div>
-                  {m.completed === true && (
-                    <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full shrink-0">Done</span>
-                  )}
-                  {m.completed === false && (
-                    <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">Missed</span>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
-
-      {/* Single save button — hidden on meetings tab */}
-      {tab !== "meetings" && (
-        <>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full mt-4 py-3 bg-linear-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
-          >
-            {saving ? "Saving…" : "Save Changes"}
-          </button>
-          {saved && (
-            <p className="text-center text-sm font-medium text-emerald-600 mt-2">Changes saved.</p>
-          )}
-        </>
-      )}
+      <Button variant="danger" size="lg" className="mt-5 w-full md:hidden" onClick={onArchive} disabled={saving}>
+        <FiArchive size={19} aria-hidden="true" /> {archiveLabel} {person.name}
+      </Button>
     </PageShell>
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Helpers and sub-components ────────────────────────────────────────────────
 
-function Card({ title, children }) {
+// Inputs are 48px tall with 16px text on a phone, 44px with 15px text on a laptop.
+const CONTROL = `${inputClass} font-normal md:min-h-11 md:text-[15px]`;
+// Ministry and milestone chips are 38px tall on a laptop, 44px on a phone.
+const SMALL_CHIP = "md:h-[38px] md:px-3.5";
+// Tags beside the name are a step larger on a laptop.
+const TAG_SIZE = "tracking-normal md:h-[26px] md:px-3 md:text-[13px]";
+
+// Firestore Timestamp, Date or date string to a valid Date, else null.
+function toDate(v) {
+  if (!v) return null;
+  const d = v.toDate ? v.toDate() : v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// "14 Sep", with the year only when it is not this year.
+function shortDate(d, now) {
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+  });
+}
+
+function SectionTitle({ className = "", children }) {
+  return <h2 className={`text-[17px] font-bold tracking-[-0.015em] text-ink ${className}`}>{children}</h2>;
+}
+
+function Notice({ role, className, children }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
-      {title && <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">{title}</p>}
+    <div role={role} className={`flex items-center gap-2.5 rounded-[14px] px-3.5 py-3 text-sm font-medium ${className}`}>
       {children}
     </div>
   );
 }
 
-const inputCls = "w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white transition-colors";
-
-function Field({ label, value, onChange, type = "text", select, placeholder, textarea }) {
+// One labelled control: text input, select or textarea.
+function TextField({ label, value, onChange, type = "text", select, placeholder, textarea, rows = 3, className = "" }) {
   return (
-    <div className="space-y-1">
-      <label className="text-xs font-semibold text-gray-700">{label}</label>
+    <Field label={label} className={`min-w-0 ${className}`}>
       {textarea ? (
-        <textarea value={value ?? ""} onChange={(e) => onChange(e.target.value)} rows={3} placeholder={placeholder} className={`${inputCls} resize-none`} />
+        <textarea value={value ?? ""} onChange={(e) => onChange(e.target.value)} rows={rows} placeholder={placeholder} className={`${CONTROL} resize-y py-2.5`} />
       ) : select ? (
-        <div className="relative">
-          <select
-            value={value ?? ""}
-            onChange={(e) => onChange(e.target.value)}
-            className={`${inputCls} appearance-none pr-9`}
-          >
-            {placeholder && <option value="">{placeholder}</option>}
-            {select.map((o) =>
-              typeof o === "string"
-                ? <option key={o} value={o}>{o}</option>
-                : <option key={o.value} value={o.value}>{o.label}</option>
-            )}
-          </select>
-          <svg
-            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-            width="12" height="12" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"
-          >
-            <path d="M5 8l5 5 5-5H5z" />
-          </svg>
-        </div>
+        <select value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={`${CONTROL} max-md:px-2.5 md:px-3`}>
+          {placeholder && <option value="">{placeholder}</option>}
+          {select.map((o) =>
+            typeof o === "string"
+              ? <option key={o} value={o}>{o}</option>
+              : <option key={o.value} value={o.value}>{o.label}</option>
+          )}
+        </select>
       ) : (
-        <input type={type} value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={inputCls} />
+        <input
+          type={type}
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`${CONTROL} ${type === "date" ? "max-md:px-2.5" : ""}`}
+        />
       )}
+    </Field>
+  );
+}
+
+// A label with an on/off switch. The track is 28px tall; the button around it
+// is 44px tall so it is easy to hit.
+function ToggleRow({ label, checked, onToggle, strong = false }) {
+  return (
+    <div className={`flex items-center justify-between gap-3 ${strong ? "min-h-11" : "min-h-12 md:min-h-11"}`}>
+      <span className={strong ? "font-semibold text-ink" : "font-medium text-ink"}>{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={onToggle}
+        className="inline-flex h-11 w-13 shrink-0 items-center px-[3px] md:w-12 md:px-0"
+      >
+        <span
+          aria-hidden="true"
+          className={`flex h-7 w-full items-center rounded-full p-[3px] transition-colors ${
+            checked ? "justify-end bg-brand" : "justify-start bg-muted"
+          }`}
+        >
+          <span className="h-[22px] w-[22px] rounded-full bg-white shadow-[0_1px_3px_rgb(20_30_60/0.25)]" />
+        </span>
+      </button>
     </div>
   );
 }
 
-const ROLE_COLORS = {
-  Contact: "bg-blue-500", Disciple: "bg-emerald-500", CGL: "bg-violet-500", "Core Team": "bg-orange-500",
-};
-const MINISTRY_COLOR_CYCLE = ["bg-pink-500", "bg-cyan-500", "bg-amber-500", "bg-violet-500", "bg-emerald-500", "bg-orange-500"];
-
-function ChipGroup({ items, active, onToggle }) {
+function MeetingState({ dot, className = "", children }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      {items.map((item, i) => {
-        const on = active.includes(item);
-        const color = ROLE_COLORS[item] || MINISTRY_COLOR_CYCLE[i % MINISTRY_COLOR_CYCLE.length];
-        return (
-          <button key={item} type="button" onClick={() => onToggle(item)}
-            className={`px-3 py-1.5 rounded-xl text-sm font-semibold border transition-all ${
-              on ? `${color} text-white border-transparent shadow-sm` : "bg-white text-gray-700 border-gray-200"
-            }`}
-          >
-            {item}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function ProgressRow({ label, checked, onToggle }) {
-  return (
-    <div onClick={onToggle} className={`flex justify-between items-center rounded-xl px-3.5 py-3 cursor-pointer transition-all border ${
-      checked ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-gray-50 border-gray-200 text-gray-700"
-    }`}>
-      <span className="text-sm font-semibold">{label}</span>
-      <span className={`text-base font-bold ${checked ? "text-emerald-500" : "text-gray-500"}`}>{checked ? "✓" : "○"}</span>
-    </div>
+    <span className={`inline-flex shrink-0 items-center gap-1.5 text-[13px] font-medium text-ink ${className}`}>
+      <span aria-hidden="true" className={`h-[7px] w-[7px] rounded-full ${dot}`} />
+      {children}
+    </span>
   );
 }

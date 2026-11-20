@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { addTeam } from "@/lib/firestore";
 import AdminPageShell from "@/components/AdminPageShell";
+import { Button, Field, inputClass } from "@/components/ui";
+import { FiAlertCircle } from "react-icons/fi";
+
+const REQUIRED_MSG = "Team name is required.";
+
+const fieldClass = `${inputClass} font-normal aria-invalid:ring-danger-ink md:min-h-11 md:text-[15px]`;
 
 export default function AdminAddTeam() {
   const { loading, profile } = useRequireAuth();
@@ -33,13 +39,15 @@ export default function AdminAddTeam() {
     setSaving(false);
   };
 
+  // The board puts this one message under the field instead of in a panel.
+  const nameMissing = error === REQUIRED_MSG;
+
   return (
-    <AdminPageShell title="Add Team" backHref="/admin/teams">
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-          <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">New Team</p>
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Team Name</label>
+    <AdminPageShell title="Add team" backHref="/admin/teams" backLabel="Teams">
+      <form onSubmit={handleSubmit} className="mt-0.5 flex max-w-140 flex-col gap-4 md:-mt-1.5">
+        <section className="flex flex-col gap-3.5 rounded-3xl bg-white p-[18px] shadow-card md:px-[22px] md:pb-[22px] md:pt-5">
+          <h2 className="text-[17px] font-bold tracking-[-0.015em]">New team</h2>
+          <Field label="Team name">
             <input
               type="text"
               required
@@ -47,22 +55,29 @@ export default function AdminAddTeam() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. North Zone"
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white transition-colors"
+              aria-invalid={nameMissing || undefined}
+              className={fieldClass}
             />
-          </div>
-        </div>
+            {nameMissing && <span role="alert" className="text-[13px] font-normal text-danger-ink">{error}</span>}
+          </Field>
+        </section>
 
-        {error && (
-          <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
-            <p className="text-red-600 text-sm text-center">{error}</p>
-          </div>
-        )}
+        {error && !nameMissing && <ErrorAlert>{error}</ErrorAlert>}
 
-        <button type="submit" disabled={saving}
-          className="w-full py-3.5 bg-gray-900 text-white font-semibold rounded-xl shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity">
-          {saving ? "Creating…" : "Create Team"}
-        </button>
+        <Button type="submit" size="lg" disabled={saving} aria-busy={saving || undefined} className="w-full disabled:shadow-none md:h-12 md:w-auto md:self-start md:rounded-[14px] md:px-6 md:text-[15px]">
+          {saving ? "Creating…" : "Create team"}
+        </Button>
       </form>
     </AdminPageShell>
+  );
+}
+
+// The board's error panel: an icon beside the message.
+function ErrorAlert({ children }) {
+  return (
+    <div role="alert" className="flex items-start gap-2.5 rounded-[14px] bg-danger-soft px-3.5 py-3 text-sm font-medium leading-[1.45] text-danger-ink">
+      <FiAlertCircle size={17} strokeWidth={2.2} aria-hidden="true" className="mt-0.5 shrink-0" />
+      <span className="min-w-0">{children}</span>
+    </div>
   );
 }

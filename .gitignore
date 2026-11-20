@@ -43,3 +43,6 @@ next-env.d.ts
 # Planning docs and agent workspace - local only, never public
 docs/superpowers/
 .superpowers/
+
+# Playwright MCP screenshots and logs
+.playwright-mcp/

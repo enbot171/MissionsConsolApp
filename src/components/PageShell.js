@@ -1,47 +1,62 @@
 "use client";
 
+import Link from "next/link";
+import { FiChevronLeft } from "react-icons/fi";
 import BottomNav from "./BottomNav";
 import SideNav from "./SideNav";
-import { useRouter } from "next/navigation";
-import { FiChevronLeft } from "react-icons/fi";
+import { BottomBar } from "./ui";
 import { useSidebar } from "@/context/SidebarContext";
 
-export default function PageShell({ title, rightAction, children, backHref }) {
-  const router = useRouter();
+// The text back link that sits above a page heading.
+export function BackLink({ href, label = "Back" }) {
+  return (
+    <Link
+      href={href}
+      className="-mt-2 mb-1 inline-flex min-h-11 items-center gap-1.5 font-semibold text-brand hover:text-navy"
+    >
+      <FiChevronLeft size={18} aria-hidden="true" />
+      {label}
+    </Link>
+  );
+}
+
+// Title on the left, the page's actions on the right. Shared with the admin shell.
+export function PageHeading({ title, subtitle, rightAction }) {
+  return (
+    <header className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 md:mb-6">
+      <div className="min-w-0">
+        {subtitle && <p className="text-[13px] text-muted">{subtitle}</p>}
+        <h1 className="text-[30px] font-bold leading-tight tracking-[-0.03em] text-ink md:text-[32px]">{title}</h1>
+      </div>
+      {rightAction && <div className="flex flex-wrap items-center gap-2.5">{rightAction}</div>}
+    </header>
+  );
+}
+
+/**
+ * Frame for every signed-in page.
+ *
+ * `bottomBar` is for form pages: on phones it takes the place of the tab bar so
+ * the main button stays under the thumb. Give such a page a `backHref` too, or
+ * there is no way out of it. `wide` lifts the width limit for grids.
+ */
+export default function PageShell({ title, subtitle, rightAction, children, backHref, backLabel, bottomBar, wide = false }) {
   const { collapsed } = useSidebar();
   const ml = collapsed ? "md:ml-16" : "md:ml-60";
-  const left = collapsed ? "md:left-16" : "md:left-60";
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-white">
       <SideNav />
 
-      <div className={`flex-1 flex flex-col transition-all duration-200 ${ml}`}>
-        {/* Header */}
-        <div className={`fixed top-0 right-0 left-0 ${left} z-10 bg-white/80 backdrop-blur-md border-b border-gray-200/60 transition-all duration-200`}>
-          <div className="flex items-center justify-between px-4 h-14">
-            <div className="flex items-center gap-2">
-              {backHref && (
-                <button
-                  onClick={() => router.push(backHref)}
-                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 -ml-1"
-                >
-                  <FiChevronLeft size={20} className="text-gray-600" />
-                </button>
-              )}
-              <h1 className="text-lg font-bold text-gray-900 tracking-tight">{title}</h1>
-            </div>
-            {rightAction && <div className="flex items-center gap-3">{rightAction}</div>}
-          </div>
-        </div>
-
-        {/* Content */}
-        <main className="flex-1 mt-14 pb-24 md:pb-10 overflow-y-auto">
-          <div className="px-4 py-4 max-w-lg mx-auto md:max-w-3xl">{children}</div>
+      <div className={`transition-[margin] duration-200 ${ml}`}>
+        <main className={`mx-auto px-5 pb-32 pt-4 md:px-9 md:pb-10 md:pt-6 ${wide ? "max-w-none" : "max-w-lg md:max-w-none"}`}>
+          {backHref && <BackLink href={backHref} label={backLabel} />}
+          <PageHeading title={title} subtitle={subtitle} rightAction={rightAction} />
+          {children}
         </main>
-
-        <BottomNav />
       </div>
+
+      {bottomBar ? <BottomBar>{bottomBar}</BottomBar> : <BottomNav />}
     </div>
   );
 }

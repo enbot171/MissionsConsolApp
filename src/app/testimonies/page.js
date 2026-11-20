@@ -7,13 +7,18 @@ import PageShell from "@/components/PageShell";
 import Spinner from "@/components/Spinner";
 import { SIGN_WONDER_TYPES } from "@/lib/report";
 import { toDateInput } from "@/lib/dates";
-import { FiPlus, FiTrash2, FiZap } from "react-icons/fi";
+import { Avatar, Button, Field } from "@/components/ui";
+import { FiAlertCircle, FiCheck, FiPlus, FiTrash2, FiUsers, FiX, FiZap } from "react-icons/fi";
 
 // A quarter back. Testimonies are read far less often than they're written, so
 // the list stays bounded rather than loading a team's whole history.
 const LOOKBACK_DAYS = 90;
 
-const inputCls = "w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500";
+const MISSING = "Say what happened.";
+
+// Inputs on this page are 44px tall, shorter than the shared input class.
+const controlClass =
+  "w-full rounded-[14px] bg-white text-base font-normal text-ink ring-1 placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand md:text-[15px]";
 
 function todayInput() {
   return toDateInput(new Date());
@@ -50,7 +55,7 @@ export default function Testimonies() {
 
   const save = async (e) => {
     e.preventDefault();
-    if (!form.description.trim()) { setError("Say what happened."); return; }
+    if (!form.description.trim()) { setError(MISSING); return; }
     setSaving(true); setError("");
     // The person is optional — plenty of testimonies come from someone whose
     // name you never got.
@@ -82,136 +87,181 @@ export default function Testimonies() {
 
   if (loading) return null;
 
+  const missing = error === MISSING;
+  const hasList = !fetching && profile?.teamId && items.length > 0;
+
   return (
     <PageShell
-      title="Testimonies"
+      title={
+        <span className="flex flex-wrap items-baseline gap-x-3">
+          Testimonies
+          {hasList && (
+            <span className="hidden text-[15px] font-normal leading-normal tracking-normal text-muted md:inline">
+              {items.length} from the team in the last {LOOKBACK_DAYS} days
+            </span>
+          )}
+        </span>
+      }
       rightAction={
-        <button
+        <Button
+          variant={open ? "quiet" : "primary"}
+          className={open
+            ? "max-md:gap-1.5 max-md:px-3.5 md:bg-white md:ring-1 md:ring-line md:hover:bg-tint"
+            : "max-md:gap-1.5 max-md:px-3.5 max-md:shadow-none md:px-[18px]"}
+          aria-expanded={open}
+          aria-controls="testimony-form"
           onClick={() => { setOpen((o) => !o); setError(""); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors"
         >
-          <FiPlus size={14} /> {open ? "Close" : "Add"}
-        </button>
+          {open ? <FiX size={17} aria-hidden="true" /> : <FiPlus size={17} aria-hidden="true" />}
+          {open ? "Close" : "Add"}
+        </Button>
       }
     >
-      {open && (
-        <form onSubmit={save} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3 mb-4">
-          <div>
-            <label className="text-xs font-semibold text-gray-700">What happened *</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => set("description", e.target.value)}
-              rows={3}
-              placeholder="Back pain gone after prayer at the station…"
-              className={`${inputCls} resize-none mt-1`}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Person</label>
-              <select value={form.personId} onChange={(e) => set("personId", e.target.value)} className={`${inputCls} appearance-none mt-1`}>
-                <option value="">Don&apos;t know / not listed</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-700">Date</label>
-              <input type="date" value={form.date} onChange={(e) => set("date", e.target.value)} className={`${inputCls} mt-1`} />
-            </div>
-          </div>
-
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.signWonder}
-              onChange={(e) => set("signWonder", e.target.checked)}
-              className="w-4 h-4 accent-amber-500"
-            />
-            <span className="text-sm text-gray-700 font-medium">This was a sign &amp; wonder</span>
-          </label>
-
-          {form.signWonder && (
-            <div className="flex flex-wrap gap-1.5">
-              {SIGN_WONDER_TYPES.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => set("category", t)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-colors ${
-                    form.category === t
-                      ? "bg-amber-50 border-amber-300 text-amber-700"
-                      : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50 transition-colors"
+      {/* The form comes first so it sits above the list on phones; on laptops
+          it is ordered after the list and stands to its right. */}
+      <div className="flex flex-col gap-3.5 md:flex-row md:flex-wrap md:items-start md:gap-5">
+        {open && (
+          <form
+            id="testimony-form"
+            onSubmit={save}
+            className="flex min-w-0 flex-col gap-2.5 rounded-3xl bg-white px-4 pb-4 pt-3.5 shadow-card md:order-2 md:flex-[1_1_320px] md:gap-3.5 md:px-[22px] md:pb-[22px] md:pt-5"
           >
-            {saving ? "Saving…" : "Save testimony"}
-          </button>
-        </form>
-      )}
+            <h2 className="hidden text-[17px] font-bold tracking-[-0.015em] md:block">Add a testimony</h2>
 
-      {fetching ? (
-        <div className="flex justify-center py-12"><Spinner /></div>
-      ) : !profile?.teamId ? (
-        <Empty text="You're not on a team yet." hint="Ask an admin to assign you one." />
-      ) : items.length === 0 ? (
-        <Empty text="No testimonies yet" hint="Log what God did — it counts toward the weekly report." />
-      ) : (
-        <div className="space-y-2">
-          {items.map((t) => {
-            const d = t.date?.toDate ? t.date.toDate() : new Date(t.date);
-            return (
-              <div key={t.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3.5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{t.description}</p>
-                    <p className="text-xs text-gray-400 mt-1.5">
-                      {d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}
-                      {t.personName && ` · ${t.personName}`}
-                      {t.assignedToName && ` · ${t.assignedToName}`}
-                    </p>
-                  </div>
-                  {t.assignedTo === user.uid && (
-                    <button
-                      onClick={() => remove(t.id)}
-                      className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors"
-                    >
-                      <FiTrash2 size={14} />
-                    </button>
-                  )}
-                </div>
-                {t.signWonder && (
-                  <span className="inline-flex items-center gap-1 mt-2 text-[11px] font-semibold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
-                    <FiZap size={10} /> {t.category}
-                  </span>
-                )}
+            <Field label="What happened *">
+              <textarea
+                value={form.description}
+                onChange={(e) => set("description", e.target.value)}
+                rows={3}
+                aria-invalid={missing || undefined}
+                placeholder="Back pain gone after prayer at the station…"
+                className={`${controlClass} resize-none px-3.5 py-2.5 ${missing ? "ring-danger-ink" : "ring-line"}`}
+              />
+              {missing && <span role="alert" className="text-[13px] font-normal text-danger-ink">{error}</span>}
+            </Field>
+
+            <div className="grid grid-cols-2 gap-2.5 md:gap-3.5">
+              <Field label="Person" className="min-w-0">
+                <select value={form.personId} onChange={(e) => set("personId", e.target.value)} className={`${controlClass} h-11 pl-2.5 ring-line md:pl-3`}>
+                  <option value="">Don&apos;t know / not listed</option>
+                  {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Date" className="min-w-0">
+                <input type="date" value={form.date} onChange={(e) => set("date", e.target.value)} className={`${controlClass} h-11 min-w-0 px-2.5 ring-line md:px-3.5`} />
+              </Field>
+            </div>
+
+            <label className="flex min-h-11 cursor-pointer items-center gap-2.5 font-medium">
+              <input
+                type="checkbox"
+                checked={form.signWonder}
+                onChange={(e) => set("signWonder", e.target.checked)}
+                className="h-5 w-5 accent-brand"
+              />
+              This was a sign &amp; wonder
+            </label>
+
+            {form.signWonder && (
+              <div role="group" aria-label="Type of sign and wonder" className="flex flex-wrap gap-2">
+                {SIGN_WONDER_TYPES.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    aria-pressed={form.category === t}
+                    onClick={() => set("category", t)}
+                    className={`inline-flex h-11 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
+                      form.category === t
+                        ? "bg-warn-soft text-warn-ink"
+                        : "bg-fill text-ink hover:bg-line-soft"
+                    }`}
+                  >
+                    {form.category === t && <FiCheck size={15} aria-hidden="true" />}
+                    {t}
+                  </button>
+                ))}
               </div>
-            );
-          })}
+            )}
+
+            {error && !missing && (
+              <div role="alert" className="flex items-start gap-2.5 rounded-[14px] bg-danger-soft px-3.5 py-3 text-sm font-medium leading-[1.45] text-danger-ink">
+                <FiAlertCircle size={17} aria-hidden="true" className="mt-0.5 shrink-0" />
+                <span className="min-w-0">{error}</span>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              disabled={saving}
+              aria-busy={saving}
+              className="max-md:h-12 max-md:rounded-2xl max-md:px-5 max-md:text-base max-md:shadow-none md:px-5"
+            >
+              {saving ? "Saving…" : "Save testimony"}
+            </Button>
+
+            <p className="hidden text-[13px] text-muted md:block">Signs and wonders count toward section C of the weekly report.</p>
+          </form>
+        )}
+
+        <div className="min-w-0 md:order-1 md:flex-[1.5_1_400px]">
+          {fetching ? (
+            <Spinner />
+          ) : !profile?.teamId ? (
+            <EmptyPanel icon={<FiUsers size={26} aria-hidden="true" />} title="You're not on a team yet." hint="Ask an admin to assign you one." />
+          ) : items.length === 0 ? (
+            <EmptyPanel icon={<FiZap size={26} aria-hidden="true" />} title="No testimonies yet" hint="Log what God did. It counts toward the weekly report." />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {items.map((t) => {
+                const d = t.date?.toDate ? t.date.toDate() : new Date(t.date);
+                const when = d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+                return (
+                  <li key={t.id} className="flex items-start gap-2 rounded-[20px] bg-tint py-3 pl-3.5 pr-1.5 md:gap-3.5 md:rounded-[18px] md:py-3.5 md:pl-4 md:pr-3">
+                    <span className="hidden shrink-0 md:block"><Avatar name={t.assignedToName} className="md:text-[15px]" /></span>
+                    <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+                      <p className="whitespace-pre-wrap">{t.description}</p>
+                      {/* Stacked on phones; tag and details share a line on laptops. */}
+                      <div className="flex flex-col items-start gap-1.5 md:flex-row md:flex-wrap md:items-center md:gap-2">
+                        {t.signWonder && (
+                          <span className="inline-flex h-6 items-center gap-[5px] whitespace-nowrap rounded-full bg-warn-soft px-2.5 text-[12.5px] font-semibold text-warn-ink">
+                            <FiZap size={12} aria-hidden="true" /> {t.category}
+                          </span>
+                        )}
+                        <span className="text-[13px] text-muted">
+                          {when}
+                          {t.personName && ` · ${t.personName}`}
+                          {t.assignedToName && ` · ${t.assignedToName}`}
+                        </span>
+                      </div>
+                    </div>
+                    {t.assignedTo === user.uid && (
+                      <button
+                        type="button"
+                        aria-label={`Delete testimony from ${when}`}
+                        onClick={() => remove(t.id)}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] text-muted transition-colors hover:bg-danger-soft hover:text-danger-ink"
+                      >
+                        <FiTrash2 size={18} aria-hidden="true" />
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
-      )}
+      </div>
     </PageShell>
   );
 }
 
-function Empty({ text, hint }) {
+// The boards' empty state: a white outlined panel with an icon tile.
+function EmptyPanel({ icon, title, hint }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
-      <p className="text-2xl mb-2">🙌</p>
-      <p className="font-semibold text-gray-800">{text}</p>
-      <p className="text-sm text-gray-400 mt-1">{hint}</p>
+    <div className="flex flex-col items-center gap-1.5 rounded-3xl bg-white px-6 py-12 text-center ring-1 ring-line-soft">
+      <span className="mb-2 flex h-14 w-14 items-center justify-center rounded-[18px] bg-brand-soft text-brand">{icon}</span>
+      <p className="text-[17px] font-bold tracking-[-0.015em]">{title}</p>
+      <p className="max-w-[420px] text-sm text-muted">{hint}</p>
     </div>
   );
 }

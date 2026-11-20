@@ -2,17 +2,20 @@
 
 import { FiSearch } from "react-icons/fi";
 
-export default function SearchBar({ value, onChange, placeholder = "Search by name..." }) {
+// `className` replaces the size, radius and outer spacing, so a page can fit
+// the box into a heading row; everything else about the look stays put.
+export default function SearchBar({ value, onChange, placeholder = "Search by name...", className = "mb-4 h-12 rounded-2xl" }) {
   return (
-    <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 shadow-sm mb-4">
-      <FiSearch className="text-gray-600 shrink-0" size={16} />
+    <label className={`flex items-center gap-2 bg-fill px-3.5 text-muted focus-within:ring-2 focus-within:ring-brand ${className}`}>
+      <FiSearch className="shrink-0" size={18} aria-hidden="true" />
       <input
-        type="text"
+        type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="flex-1 bg-transparent outline-none text-gray-800 text-sm placeholder:text-gray-600"
+        aria-label={placeholder}
+        className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-muted"
       />
-    </div>
+    </label>
   );
 }

@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { buildWeeklyReport, reportToCsv, weekStart, DAY_LABELS } from "@/lib/report";
+import {
+  buildWeeklyReport, reportToCsv, weekStart, DAY_LABELS,
+  applyOverrides, mergeOverrides, overrideKey,
+} from "@/lib/report";
 
 // Mon 2026-08-03 .. Sun 2026-08-09
 const START = new Date(2026, 7, 3);
@@ -155,5 +158,105 @@ describe("reportToCsv", () => {
   it("emits a member line per team member under each row", () => {
     expect(csv).toContain("\nAlice,1,0,0,0,0,0,0,1\n");
     expect(csv).toContain("\nBob,0,0,0,0,0,0,0,0\n");
+  });
+});
+
+describe("report overrides", () => {
+  const people = [
+    { assignedTo: "u1", createdAt: at(0) },
+    { assignedTo: "u1", createdAt: at(0) },
+    { assignedTo: "u2", createdAt: at(3), prayed: true },
+    // Owned by someone who is not on the member list: counts toward the team
+    // total but has no row of its own.
+    { assignedTo: "gone", createdAt: at(0) },
+  ];
+  const build = () => buildWeeklyReport({ members: MEMBERS, people, start: START });
+  const talked = (report) => row(report, "evangelism", "talkedTo");
+  const member = (r, uid) => r.members.find((m) => m.uid === uid);
+
+  it("builds keys as metric|uid|day", () => {
+    expect(overrideKey("talkedTo", "u1", 0)).toBe("talkedTo|u1|0");
+  });
+
+  it("replaces one cell and moves the row, column and grand totals by the difference", () => {
+    const out = applyOverrides(build(), { "talkedTo|u1|0": 5 });
+    const r = talked(out);
+    expect(member(r, "u1").days[0]).toBe(5);
+    expect(member(r, "u1").total).toBe(5);
+    // Counted Monday total was 3 (two for u1, one for the departed owner).
+    expect(r.totals[0]).toBe(6);
+    expect(r.total).toBe(7);
+  });
+
+  it("applies several cells in one row, including an override to zero", () => {
+    const out = applyOverrides(build(), { "talkedTo|u1|0": 0, "talkedTo|u2|3": 4, "talkedTo|u2|6": 2 });
+    const r = talked(out);
+    expect(member(r, "u1").total).toBe(0);
+    expect(member(r, "u2").days).toEqual([0, 0, 0, 4, 0, 0, 2]);
+    expect(member(r, "u2").total).toBe(6);
+    expect(r.totals).toEqual([1, 0, 0, 4, 0, 0, 2]);
+    expect(r.total).toBe(7);
+  });
+
+  it("reaches rows in the connection section too", () => {
+    const out = applyOverrides(build(), { "metUp|u2|1": 3 });
+    const r = row(out, "connection", "metUp");
+    expect(member(r, "u2").days[1]).toBe(3);
+    expect(r.total).toBe(3);
+  });
+
+  it("ignores keys for unknown metrics, unknown members and bad days", () => {
+    const counted = build();
+    const out = applyOverrides(counted, { "nope|u1|0": 9, "talkedTo|gone|0": 9, "talkedTo|u1|7": 9, "talkedTo|u1|x": 9 });
+    expect(out.evangelism).toEqual(counted.evangelism);
+    expect(out.connection).toEqual(counted.connection);
+  });
+
+  it("does not change the report it was given", () => {
+    const counted = build();
+    const before = JSON.stringify(counted);
+    applyOverrides(counted, { "talkedTo|u1|0": 5 });
+    expect(JSON.stringify(counted)).toBe(before);
+  });
+
+  it("returns the counted numbers when there are no overrides", () => {
+    const counted = build();
+    expect(applyOverrides(counted, {}).evangelism).toEqual(counted.evangelism);
+    expect(applyOverrides(counted, undefined).evangelism).toEqual(counted.evangelism);
+  });
+
+  it("carries overrides into the CSV", () => {
+    const csv = reportToCsv(applyOverrides(build(), { "talkedTo|u1|0": 5 }));
+    expect(csv).toContain("Alice,5,0,0,0,0,0,0,5");
+  });
+
+  describe("mergeOverrides", () => {
+    it("stores a changed cell that differs from the count", () => {
+      expect(mergeOverrides(build(), {}, { "talkedTo|u1|0": 5 })).toEqual({ "talkedTo|u1|0": 5 });
+    });
+
+    it("drops a changed cell that equals the count, so it follows the count again", () => {
+      const existing = { "talkedTo|u1|0": 5 };
+      expect(mergeOverrides(build(), existing, { "talkedTo|u1|0": 2 })).toEqual({});
+    });
+
+    it("overwrites an existing override that was changed", () => {
+      expect(mergeOverrides(build(), { "talkedTo|u1|0": 5 }, { "talkedTo|u1|0": 8 })).toEqual({ "talkedTo|u1|0": 8 });
+    });
+
+    it("keeps overrides that were not touched, including a departed member's", () => {
+      const existing = { "talkedTo|left|2": 4, "gospel|u2|1": 1 };
+      expect(mergeOverrides(build(), existing, { "talkedTo|u1|0": 5 })).toEqual({
+        "talkedTo|left|2": 4, "gospel|u2|1": 1, "talkedTo|u1|0": 5,
+      });
+    });
+
+    it("does not change the maps it was given", () => {
+      const existing = { "talkedTo|u1|0": 5 };
+      const changes = { "talkedTo|u1|0": 2 };
+      mergeOverrides(build(), existing, changes);
+      expect(existing).toEqual({ "talkedTo|u1|0": 5 });
+      expect(changes).toEqual({ "talkedTo|u1|0": 2 });
+    });
   });
 });

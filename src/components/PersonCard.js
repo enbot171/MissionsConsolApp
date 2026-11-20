@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ROLE_STYLES } from "@/config/app";
-import ContactActions from "@/components/ContactActions";
+import ContactLine from "@/components/ContactActions";
+import { Avatar, RoleTag } from "@/components/ui";
 
+// A flat list row on phones, an outlined card from tablet width up.
 export default function PersonCard({ person, onRemove, onSelect, selected, onSchedule }) {
   const router = useRouter();
 
@@ -12,39 +13,30 @@ export default function PersonCard({ person, onRemove, onSelect, selected, onSch
     router.push(`/person/${person.id}`);
   };
 
+  const hasTags = (person.roles || []).length > 0 || person._matchedField;
+
   return (
     <div
       onClick={handleClick}
-      className={`bg-white rounded-2xl border shadow-sm p-4 flex items-center gap-3 cursor-pointer active:scale-[0.98] transition-transform ${
-        selected ? "border-blue-400 bg-blue-50" : "border-gray-100"
+      className={`-mx-2 flex min-h-16.5 min-w-0 cursor-pointer items-center gap-3 rounded-2xl px-2 py-1 transition-colors md:mx-0 md:rounded-[20px] md:px-4 md:py-3.5 md:ring-1 ${
+        selected ? "bg-brand-soft md:ring-brand" : "bg-white hover:bg-tint md:ring-line-soft"
       }`}
     >
-      {/* Avatar */}
-      <div className="w-11 h-11 rounded-xl bg-linear-to-br from-blue-400 to-indigo-500 flex items-center justify-center shrink-0 shadow-sm">
-        <span className="text-white font-bold text-base">
-          {person.name?.charAt(0).toUpperCase() || "?"}
-        </span>
-      </div>
+      <Avatar name={person.name} className="md:text-[15px]" />
 
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-gray-900 truncate">{person.name}</p>
-        <p className="text-sm text-gray-600 truncate flex items-center gap-1.5">
-          <span className="truncate">
-            {person.contactType && <span className="text-gray-700">{person.contactType} · </span>}
-            {person.contact}
-          </span>
-          <ContactActions contactType={person.contactType} contact={person.contact} size={13} />
-        </p>
-        {((person.roles || []).length > 0 || person._matchedField) && (
-          <div className="flex gap-1 mt-1.5 flex-wrap items-center">
+      {/* Tags sit beside the name on phones and under it on cards. */}
+      <div className="flex min-w-0 flex-1 items-center gap-2 md:flex-col md:items-stretch md:gap-1.5">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-base font-semibold tracking-[-0.01em] text-ink md:text-[15px]">{person.name}</p>
+          <ContactLine contactType={person.contactType} contact={person.contact} className="mt-0.5" />
+        </div>
+        {hasTags && (
+          <div className="flex max-w-[45%] shrink-0 flex-wrap items-center justify-end gap-1 md:max-w-none md:justify-start">
             {(person.roles || []).map((r) => (
-              <span key={r} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${ROLE_STYLES[r] || "bg-gray-100 text-gray-700"}`}>
-                {r}
-              </span>
+              <RoleTag key={r} role={r} className="md:h-[22px] md:px-[9px] md:text-xs" />
             ))}
             {person._matchedField && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">
+              <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full bg-warn-soft px-2.5 text-[12.5px] font-semibold text-warn-ink md:h-[22px] md:px-2 md:text-xs">
                 matched: {person._matchedField}
               </span>
             )}
@@ -53,32 +45,39 @@ export default function PersonCard({ person, onRemove, onSelect, selected, onSch
       </div>
 
       {onSelect ? (
-        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
-          selected ? "bg-blue-500 border-blue-500" : "border-gray-300"
-        }`}>
+        <span
+          aria-hidden="true"
+          className={`flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-[7px] transition-colors ${
+            selected ? "bg-brand text-white" : "bg-white ring-[1.5px] ring-inset ring-muted"
+          }`}
+        >
           {selected && (
-            <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12" />
             </svg>
           )}
-        </div>
+        </span>
       ) : onRemove ? (
         <button
+          type="button"
+          aria-label={`Remove ${person.name}`}
           onClick={(e) => { e.stopPropagation(); onRemove(person); }}
-          className="w-7 h-7 rounded-full bg-red-50 text-red-400 flex items-center justify-center shrink-0 hover:bg-red-100 transition-colors"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-fill text-ink transition-colors hover:bg-line-soft"
         >
           <RemoveIcon />
         </button>
       ) : onSchedule ? (
         <button
-          onClick={(e) => { e.stopPropagation(); onSchedule(person); }}
-          className="w-8 h-8 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center shrink-0 hover:bg-blue-100 transition-colors"
+          type="button"
+          aria-label={`Schedule meeting with ${person.name}`}
           title="Schedule meeting"
+          onClick={(e) => { e.stopPropagation(); onSchedule(person); }}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-brand-soft text-brand transition-colors hover:bg-role-contact"
         >
-          <CalendarIcon size={15} />
+          <CalendarIcon size={17} />
         </button>
       ) : (
-        <FiChevronRight className="text-gray-500 shrink-0" size={18} />
+        <FiChevronRight className="hidden shrink-0 text-muted md:block" size={16} />
       )}
     </div>
   );
@@ -86,15 +85,15 @@ export default function PersonCard({ person, onRemove, onSelect, selected, onSch
 
 function FiChevronRight({ className, size }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <polyline points="9 18 15 12 9 6" />
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M9 6l6 6-6 6" />
     </svg>
   );
 }
 
 function RemoveIcon() {
   return (
-    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+    <svg aria-hidden="true" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
@@ -103,7 +102,7 @@ function RemoveIcon() {
 
 function CalendarIcon({ size }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />

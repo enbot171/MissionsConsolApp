@@ -4,10 +4,10 @@ export const CONTACT_ROLES = ["Contact", "Disciple", "CGL"];
 // Core Team is a separate toggle with ministry sub-selection (ministries are dynamic from Firestore coreTeams collection)
 
 export const ROLE_STYLES = {
-  Contact: "bg-blue-50 text-blue-600",
-  Disciple: "bg-emerald-50 text-emerald-600",
-  CGL: "bg-violet-50 text-violet-600",
-  "Core Team": "bg-orange-50 text-orange-600",
+  Contact: "bg-role-contact text-role-contact-ink",
+  Disciple: "bg-role-disciple text-role-disciple-ink",
+  CGL: "bg-role-cgl text-role-cgl-ink",
+  "Core Team": "bg-role-core text-role-core-ink",
 };
 
 export const MILESTONES = [

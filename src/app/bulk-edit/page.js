@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { getPeopleByTeam, getCGsByTeam, getUsersByTeam, updatePerson, addPerson } from "@/lib/firestore";
 import { CONTACT_TYPES, SOURCES, MILESTONES } from "@/config/app";
-import { FiArrowLeft, FiPlus } from "react-icons/fi";
+import PageShell from "@/components/PageShell";
+import Spinner from "@/components/Spinner";
+import { Button } from "@/components/ui";
+import { FiAlertCircle, FiCheck, FiPlus } from "react-icons/fi";
 
 // Column groups shown in a top header band
 const GROUPS = [
-  { label: "Basic Info",       span: 9 },
+  { label: "Basic info",       span: 9 },
   { label: "Notes",            span: 2 },
   { label: "Roles",            span: 4 },
   { label: "Status",           span: 3 },
@@ -18,18 +20,18 @@ const GROUPS = [
 
 const COLUMNS = [
   // ── Basic Info ──────────────────────────────────────────────────────────────
-  { key: "name",         label: "Name *",     type: "text",      width: 155, required: true },
-  { key: "contactType",  label: "Type",        type: "select",    options: CONTACT_TYPES, width: 105 },
-  { key: "contact",      label: "Contact *",   type: "text",      width: 145, required: true },
-  { key: "source",       label: "Source",      type: "select",    options: SOURCES, width: 105 },
-  { key: "age",          label: "Age",         type: "number",    width: 60 },
+  { key: "name",         label: "Name (required)", type: "text",      width: 155, required: true },
+  { key: "contactType",  label: "Type",        type: "select",    options: CONTACT_TYPES, width: 140 },
+  { key: "contact",      label: "Contact (required)", type: "text",      width: 145, required: true },
+  { key: "source",       label: "Source",      type: "select",    options: SOURCES, width: 150 },
+  { key: "age",          label: "Age",         type: "number",    width: 64 },
   { key: "address",      label: "Address",     type: "text",      width: 185 },
-  { key: "metAt",        label: "Met At",      type: "text",      width: 120 },
+  { key: "metAt",        label: "Met at",      type: "text",      width: 120 },
   { key: "cgId",         label: "CG",          type: "cg",        width: 130 },
-  { key: "assignedTo",   label: "Assigned To", type: "user",      width: 130 },
+  { key: "assignedTo",   label: "Assigned to", type: "user",      width: 130 },
   // ── Notes ───────────────────────────────────────────────────────────────────
   { key: "description",      label: "Remarks",          type: "text", width: 175 },
-  { key: "progressRemarks",  label: "Progress Remarks", type: "text", width: 175 },
+  { key: "progressRemarks",  label: "Progress remarks", type: "text", width: 175 },
   // ── Roles ───────────────────────────────────────────────────────────────────
   { key: "roles", subKey: "Contact",    label: "Contact",    type: "role", width: 68 },
   { key: "roles", subKey: "Disciple",   label: "Disciple",   type: "role", width: 68 },
@@ -42,6 +44,9 @@ const COLUMNS = [
   // ── Milestones ──────────────────────────────────────────────────────────────
   ...MILESTONES.map((m) => ({ key: "milestones", subKey: m, label: m, type: "milestone", width: Math.max(52, m.length * 8 + 16) })),
 ];
+
+// 44px selection column plus every data column.
+const GRID_WIDTH = 44 + COLUMNS.reduce((a, c) => a + c.width, 0);
 
 const EXCLUSIVE_ROLES = ["Contact", "Disciple"];
 
@@ -114,8 +119,6 @@ function applyPastedValue(col, val, row) {
 
 export default function BulkEdit() {
   const { loading: authLoading, profile, user } = useRequireAuth();
-  const router = useRouter();
-
   const [rows, setRows] = useState([]);
   const [dirty, setDirty] = useState(new Set());
   const [errors, setErrors] = useState(new Set());
@@ -278,115 +281,142 @@ export default function BulkEdit() {
   const dirtyExisting = [...dirty].filter((i) => rows[i] && !rows[i]._isNew).length;
   const totalChanges = pendingNew + dirtyExisting;
 
-  if (authLoading || fetching) {
+  if (authLoading) return <Spinner fullScreen />;
+
+  const existingCount = rows.filter((r) => !r._isNew).length;
+  const newCount = rows.length - existingCount;
+  const saveLabel = saving ? "Saving…" : totalChanges > 0 ? `Save (${totalChanges})` : "Save";
+  const archiveLabel = archiving ? "Archiving…" : `Archive (${selectedIds.size})`;
+
+  if (fetching) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <div className="w-7 h-7 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-      </div>
+      <PageShell wide title="Bulk edit" backHref="/people" backLabel="My people">
+        <div role="status" className="flex min-h-[360px] items-center justify-center">
+          <span aria-hidden="true" className="h-7 w-7 animate-spin rounded-full border-[3px] border-line border-t-brand" />
+          <span className="sr-only">Loading</span>
+        </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
-
-      {/* ── Toolbar ── */}
-      <div className="flex items-center gap-3 px-5 py-3 bg-white border-b border-gray-200 shrink-0 shadow-sm">
-        <button
-          onClick={() => router.push("/people")}
-          className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 transition-colors"
-        >
-          <FiArrowLeft size={16} />
-        </button>
-        <h1 className="font-bold text-gray-900 text-base">Bulk Edit</h1>
-        <span className="text-xs text-gray-400 font-medium">{rows.filter((r) => !r._isNew).length} people</span>
-        <div className="flex-1" />
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Add rows:</span>
-          <input
-            type="number" min={1} max={100}
-            value={addCount}
-            onChange={(e) => setAddCount(parseInt(e.target.value) || 1)}
-            className="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center outline-none focus:border-blue-400 bg-gray-50"
-          />
-          <button
-            onClick={handleAddRows}
-            className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold transition-colors"
-          >
-            <FiPlus size={14} /> Add
-          </button>
-        </div>
-
-        {saveError && <span className="text-sm text-red-500 font-medium">{saveError}</span>}
+    <PageShell
+      wide
+      title={
+        <span className="flex items-baseline gap-2.5 md:gap-3">
+          Bulk edit
+          <span className="text-sm font-normal tracking-normal text-muted md:text-[15px]">
+            {existingCount} {existingCount === 1 ? "person" : "people"}
+          </span>
+        </span>
+      }
+      backHref="/people"
+      backLabel="My people"
+      bottomBar={
+        <>
+          {selectedIds.size > 0 && (
+            <Button variant="outline" size="lg" className="shrink-0 px-[18px]!" onClick={handleBulkArchive} disabled={archiving}>{archiveLabel}</Button>
+          )}
+          <Button size="lg" className="flex-1" onClick={handleSaveAll} disabled={saving || totalChanges === 0}>{saveLabel}</Button>
+        </>
+      }
+      rightAction={
+        <>
+          {saveError && (
+            <StatusPill tone="error">{saveError}</StatusPill>
+          )}
+          {savedMsg && (
+            <StatusPill tone="success">Saved!</StatusPill>
+          )}
+          <label className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+            Add rows
+            <input
+              type="number" min={1} max={100}
+              value={addCount}
+              onChange={(e) => setAddCount(parseInt(e.target.value) || 1)}
+              className="h-11 w-[60px] rounded-[14px] border border-line bg-white px-2 text-center text-base font-normal text-ink md:w-[68px] md:px-2.5 md:text-[15px]"
+            />
+          </label>
+          <Button variant="soft" className="gap-1.5!" onClick={handleAddRows}>
+            <FiPlus size={17} aria-hidden="true" className="hidden md:block" />
+            Add
+          </Button>
+          <span className="hidden items-center gap-2.5 md:flex">
+            {selectedIds.size > 0 && (
+              <Button variant="outline" onClick={handleBulkArchive} disabled={archiving}>{archiveLabel}</Button>
+            )}
+            <Button className="px-5!" onClick={handleSaveAll} disabled={saving || totalChanges === 0}>{saveLabel}</Button>
+          </span>
+        </>
+      }
+    >
+      {/* ── Hint and legend ── */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 rounded-2xl bg-brand-soft px-3.5 py-2.5 text-[13px] text-ink-2 md:mb-3.5 md:gap-x-[18px] md:gap-y-2 md:px-4 md:text-[13.5px]">
+        <span className="min-w-0 flex-[1_1_100%] md:flex-[1_1_280px]">
+          <span className="md:hidden">Tap</span><span className="hidden md:inline">Click</span> a cell, then paste from Google Sheets to fill many cells at once.
+        </span>
+        <LegendSwatch className="bg-warn-soft">Edited</LegendSwatch>
+        <LegendSwatch className="bg-ok-soft">New</LegendSwatch>
+        <LegendSwatch className="bg-tint-rose">Missing required</LegendSwatch>
         {errors.size > 0 && !saveError && (
-          <span className="text-sm text-red-500 font-medium">{errors.size} row{errors.size > 1 ? "s" : ""} missing Name / Contact</span>
+          <span role="alert" className="inline-flex flex-[1_1_100%] items-center gap-1.5 font-semibold text-danger-ink md:flex-none">
+            <FiAlertCircle size={16} aria-hidden="true" />
+            {errors.size} row{errors.size > 1 ? "s" : ""} missing Name / Contact
+          </span>
         )}
-        {savedMsg && <span className="text-sm text-emerald-600 font-semibold">Saved!</span>}
+      </div>
 
-        {selectedIds.size > 0 && (
-          <button
-            onClick={handleBulkArchive}
-            disabled={archiving}
-            className="px-4 py-1.5 bg-gray-700 hover:bg-gray-800 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
-          >
-            {archiving ? "Archiving…" : `Archive (${selectedIds.size})`}
-          </button>
-        )}
-
-        <button
-          onClick={handleSaveAll}
-          disabled={saving || totalChanges === 0}
-          className="px-5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
+      {/* ── Table: scrolls both ways inside its own frame so the header row and
+          the first column stay put. Full bleed on phones. ── */}
+      <div className="-mx-5 max-h-[70dvh] overflow-auto border-t border-line md:mx-0 md:max-h-[calc(100dvh-19rem)] md:rounded-2xl md:border-t-0 md:ring-1 md:ring-line">
+        <table
+          aria-label="People, editable"
+          className="table-fixed border-separate border-spacing-0 text-sm"
+          style={{ width: GRID_WIDTH, minWidth: GRID_WIDTH }}
         >
-          {saving ? "Saving…" : totalChanges > 0 ? `Save (${totalChanges})` : "Save"}
-        </button>
-      </div>
-
-      {/* ── Hint ── */}
-      <div className="px-5 py-1.5 bg-blue-50 border-b border-blue-100 text-xs text-blue-700 shrink-0 flex gap-5">
-        <span>Click a cell → paste from Google Sheets to bulk fill.</span>
-        <span><span className="font-semibold text-amber-600">Amber</span> = edited</span>
-        <span><span className="font-semibold text-green-600">Green</span> = new</span>
-        <span><span className="font-semibold text-red-500">Red</span> = missing required</span>
-      </div>
-
-      {/* ── Table ── */}
-      <div className="flex-1 overflow-auto">
-        <table className="text-sm border-collapse" style={{ minWidth: COLUMNS.reduce((a, c) => a + c.width, 0) + 48 }}>
-          <thead className="sticky top-0 z-10">
+          {/* Fixed layout: these are the board's grid tracks, to the pixel. */}
+          <colgroup>
+            <col style={{ width: 44 }} />
+            {COLUMNS.map((col, ci) => (
+              <col key={`${col.key}-${col.subKey ?? ci}`} style={{ width: col.width }} />
+            ))}
+          </colgroup>
+          <thead className="sticky top-0 z-20">
             {/* Group row */}
-            <tr className="bg-gray-200 border-b border-gray-300">
-              <th className="w-12 border-r border-gray-300 sticky left-0 bg-gray-200 z-20" />
+            <tr className="h-[30px] bg-fill text-[12.5px] text-muted">
+              <th className="sticky left-0 z-10 border-r border-line bg-fill p-0" />
               {GROUPS.map((g, gi) => (
                 <th
                   key={gi}
                   colSpan={g.span}
-                  className="px-3 py-1 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider border-r-2 border-gray-300"
+                  scope="colgroup"
+                  className={`px-2.5 py-0 text-left font-bold ${gi < GROUPS.length - 1 ? "border-r-2 border-line" : ""}`}
                 >
                   {g.label}
                 </th>
               ))}
             </tr>
             {/* Column header row */}
-            <tr className="bg-gray-100 border-b-2 border-gray-300">
-              <th className="w-12 px-2 py-2 text-xs font-semibold text-gray-400 border-r border-gray-300 text-center sticky left-0 bg-gray-100 z-20">
-                <input
-                  type="checkbox"
-                  className="w-3.5 h-3.5 accent-gray-700 cursor-pointer"
-                  checked={selectedIds.size > 0 && rows.filter((r) => !r._isNew).every((r) => selectedIds.has(r.id))}
-                  onChange={(e) => {
-                    const existingIds = rows.filter((r) => !r._isNew).map((r) => r.id);
-                    setSelectedIds(e.target.checked ? new Set(existingIds) : new Set());
-                  }}
-                />
+            <tr className="bg-tint text-[13px] text-ink">
+              <th className="sticky left-0 z-10 border-b border-r border-line bg-tint p-0">
+                <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
+                  <Check
+                    aria-label="Select all people"
+                    checked={selectedIds.size > 0 && rows.filter((r) => !r._isNew).every((r) => selectedIds.has(r.id))}
+                    onChange={(e) => {
+                      const existingIds = rows.filter((r) => !r._isNew).map((r) => r.id);
+                      setSelectedIds(e.target.checked ? new Set(existingIds) : new Set());
+                    }}
+                  />
+                </label>
               </th>
               {COLUMNS.map((col, ci) => {
                 const isGroupEnd = isLastInGroup(ci);
                 return (
                   <th
                     key={`${col.key}-${col.subKey ?? ci}`}
-                    className={`px-2 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap ${isGroupEnd ? "border-r-2 border-gray-300" : "border-r border-gray-200"}`}
-                    style={{ width: col.width, minWidth: col.width }}
+                    scope="col"
+                    className={`h-11 overflow-hidden whitespace-nowrap border-b border-b-line px-2.5 py-0 text-left font-bold ${isGroupEnd ? "border-r-2 border-r-line" : "border-r border-r-line-soft"}`}
                   >
                     {col.label}
                   </th>
@@ -395,47 +425,44 @@ export default function BulkEdit() {
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={COLUMNS.length + 1} className="text-center text-gray-400 py-20 text-sm">
-                  No people yet — use &ldquo;Add rows&rdquo; to create new entries.
-                </td>
-              </tr>
-            )}
             {rows.map((row, ri) => {
               const isNew = row._isNew;
               const isDirty = dirty.has(ri) && !isNew;
               const hasError = errors.has(ri);
-              const bgBase = hasError ? "bg-red-50" : isNew ? "bg-green-50" : isDirty ? "bg-amber-50" : "bg-white hover:bg-gray-50";
+              const isSelected = !isNew && selectedIds.has(row.id);
+              const tint = hasError ? "bg-tint-rose" : isNew ? "bg-ok-soft" : isDirty ? "bg-warn-soft" : isSelected ? "bg-fill" : "";
+              const rowName = row.name?.trim() || `new row ${ri + 1}`;
 
               return (
-                <tr key={row.id || row._key} className={`border-b border-gray-100 ${bgBase}`}>
-                  <td className={`px-2 py-0 text-xs text-gray-400 border-r border-gray-200 text-center w-12 sticky left-0 z-10 ${hasError ? "bg-red-50" : isNew ? "bg-green-50" : isDirty ? "bg-amber-50" : selectedIds.has(row.id) ? "bg-gray-100" : "bg-white"}`}>
+                <tr key={row.id || row._key} className={`group ${tint || "bg-white hover:bg-tint"}`}>
+                  <td className={`sticky left-0 z-10 border-b border-r border-b-line-soft border-r-line p-0 text-center ${tint || "bg-white group-hover:bg-tint"}`}>
                     {!isNew ? (
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(row.id)}
-                        onChange={() => toggleRowSelect(row.id)}
-                        className="w-3.5 h-3.5 accent-gray-700 cursor-pointer"
-                      />
+                      <label className="flex h-11 w-11 cursor-pointer items-center justify-center">
+                        <Check
+                          aria-label={`Select ${rowName}`}
+                          checked={isSelected}
+                          onChange={() => toggleRowSelect(row.id)}
+                        />
+                      </label>
                     ) : (
-                      <span className="text-gray-300">{ri + 1}</span>
+                      <span className="text-[13px] text-muted">{ri + 1}</span>
                     )}
                   </td>
                   {COLUMNS.map((col, ci) => {
                     const isFocused = focusedCell?.row === ri && focusedCell?.col === ci;
                     const isGroupEnd = isLastInGroup(ci);
-                    const isErrCell = hasError && col.required;
                     const cellValue = getCellValue(col, row);
+                    // As on the board: only the required cells still empty are ringed.
+                    const isErrCell = hasError && col.required && !String(cellValue ?? "").trim();
 
                     return (
                       <td
                         key={`${col.key}-${col.subKey ?? ci}`}
-                        className={`p-0 ${isGroupEnd ? "border-r-2 border-gray-300" : "border-r border-gray-100"} ${isFocused ? "ring-2 ring-inset ring-blue-400" : ""} ${isErrCell && !isFocused ? "ring-1 ring-inset ring-red-300" : ""}`}
-                        style={{ width: col.width, minWidth: col.width }}
+                        className={`border-b border-b-line-soft p-0 ${isGroupEnd ? "border-r-2 border-r-line" : "border-r border-r-line-soft"} ${isFocused ? "ring-2 ring-inset ring-brand" : ""} ${isErrCell && !isFocused ? "ring-2 ring-inset ring-warn" : ""}`}
                       >
                         <CellInput
                           col={col}
+                          label={`${col.label}, ${rowName}`}
                           value={cellValue}
                           cgs={cgs}
                           users={users}
@@ -458,8 +485,75 @@ export default function BulkEdit() {
             })}
           </tbody>
         </table>
+        {/* Outside the table so it sits in the visible width, not the grid's. */}
+        {rows.length === 0 && (
+          <div className="sticky left-0 flex flex-col items-center gap-1.5 px-6 py-[72px] text-center">
+            <span aria-hidden="true" className="inline-flex h-14 w-14 items-center justify-center rounded-[18px] bg-brand-soft text-brand">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 6h16v12H4zM4 10h16M4 14h16M10 6v12" />
+              </svg>
+            </span>
+            <p className="mt-1.5 text-[17px] font-bold tracking-[-0.015em] text-ink">No people yet</p>
+            <p className="text-sm text-muted">Use &ldquo;Add rows&rdquo; to create new entries.</p>
+          </div>
+        )}
       </div>
+
+      {/* ── Footer line (laptop board only; the phone board ends at the grid) ── */}
+      <div className="mt-3.5 hidden flex-wrap items-center justify-between gap-3 text-[13px] text-muted md:flex">
+        <span>Name and contact are required.</span>
+        <span>
+          {rows.length === 0
+            ? "Showing 0"
+            : `Showing ${existingCount} of ${existingCount}${newCount > 0 ? `, plus ${newCount} new ${newCount === 1 ? "row" : "rows"}` : ""}`}
+        </span>
+      </div>
+    </PageShell>
+  );
+}
+
+// The board's message pill, shown at the start of the heading actions.
+function StatusPill({ tone, children }) {
+  const isError = tone === "error";
+  return (
+    <div
+      role={isError ? "alert" : "status"}
+      className={`flex items-center gap-2.5 rounded-[14px] px-3.5 py-3 text-sm font-medium ${isError ? "bg-danger-soft text-danger-ink" : "bg-ok-soft text-ok-ink"}`}
+    >
+      {isError ? <FiAlertCircle size={18} aria-hidden="true" className="shrink-0" /> : <FiCheck size={18} aria-hidden="true" className="shrink-0" />}
+      <span>{children}</span>
     </div>
+  );
+}
+
+// A real checkbox drawn as the board's 22px box: white with a grey edge, or
+// brand with a white tick.
+function Check(props) {
+  return (
+    <span className="relative inline-flex h-[22px] w-[22px] shrink-0">
+      <input
+        type="checkbox"
+        className="peer m-0 h-[22px] w-[22px] cursor-pointer appearance-none rounded-[7px] border-[1.5px] border-muted bg-white checked:border-brand checked:bg-brand"
+        {...props}
+      />
+      <svg
+        aria-hidden="true"
+        width="14" height="14" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+        className="pointer-events-none absolute inset-0 m-auto hidden text-white peer-checked:block"
+      >
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
+      </svg>
+    </span>
+  );
+}
+
+function LegendSwatch({ className, children }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden="true" className={`h-4 w-4 rounded-[5px] ring-1 ring-line ${className}`} />
+      {children}
+    </span>
   );
 }
 
@@ -474,25 +568,28 @@ function isLastInGroup(ci) {
   return false;
 }
 
-const cellCls = "w-full h-full px-2 py-2 bg-transparent outline-none text-gray-900 text-sm leading-tight";
+// Dense on laptop; 16px on phones so focusing a cell does not zoom the page.
+const cellBase = "h-11 w-full min-w-0 bg-transparent text-base text-ink outline-none md:text-sm";
+const cellCls = `${cellBase} px-2.5`;
+// Narrower than the global select padding so short values fit the board's widths.
+const selectCls = `${cellBase} pl-1.5 pr-6`;
 
-function CellInput({ col, value, cgs, users, onFocus, onChange }) {
+function CellInput({ col, label, value, cgs, users, onFocus, onChange }) {
   if (col.type === "bool" || col.type === "role" || col.type === "milestone") {
     return (
-      <div className="flex items-center justify-center h-8">
-        <input
-          type="checkbox"
+      <label className="flex h-11 cursor-pointer items-center justify-center">
+        <Check
+          aria-label={label}
           checked={!!value}
           onChange={(e) => onChange(e.target.checked)}
           onFocus={onFocus}
-          className="w-4 h-4 accent-blue-500 cursor-pointer"
         />
-      </div>
+      </label>
     );
   }
   if (col.type === "select") {
     return (
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value)} onFocus={onFocus} className={cellCls}>
+      <select aria-label={label} value={value ?? ""} onChange={(e) => onChange(e.target.value)} onFocus={onFocus} className={selectCls}>
         <option value=""></option>
         {(col.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -500,7 +597,7 @@ function CellInput({ col, value, cgs, users, onFocus, onChange }) {
   }
   if (col.type === "cg") {
     return (
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value)} onFocus={onFocus} className={cellCls}>
+      <select aria-label={label} value={value ?? ""} onChange={(e) => onChange(e.target.value)} onFocus={onFocus} className={selectCls}>
         <option value=""></option>
         {cgs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
@@ -508,7 +605,7 @@ function CellInput({ col, value, cgs, users, onFocus, onChange }) {
   }
   if (col.type === "user") {
     return (
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value)} onFocus={onFocus} className={cellCls}>
+      <select aria-label={label} value={value ?? ""} onChange={(e) => onChange(e.target.value)} onFocus={onFocus} className={selectCls}>
         <option value=""></option>
         {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
       </select>
@@ -517,6 +614,7 @@ function CellInput({ col, value, cgs, users, onFocus, onChange }) {
   return (
     <input
       type={col.type === "number" ? "number" : "text"}
+      aria-label={label}
       value={value ?? ""}
       onChange={(e) => onChange(col.type === "number" ? (e.target.value ? parseInt(e.target.value) : null) : e.target.value)}
       onFocus={onFocus}

@@ -1,22 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { subscribeAllPeopleByAssignee, updatePerson } from "@/lib/firestore";
 import PageShell from "@/components/PageShell";
 import PersonCard from "@/components/PersonCard";
 import SearchBar from "@/components/SearchBar";
 import { CONTACT_ROLES, CONTACT_TYPES, SOURCES } from "@/config/app";
-import { FiSliders, FiGrid, FiCheckSquare, FiList } from "react-icons/fi";
-import ContactActions from "@/components/ContactActions";
-
-const ROLE_COLORS = {
-  Contact: "bg-blue-500",
-  Disciple: "bg-emerald-500",
-  CGL: "bg-violet-500",
-  "Core Team": "bg-orange-500",
-};
+import { FiArchive, FiX } from "react-icons/fi";
+import { ContactHandle, ContactTypeTag } from "@/components/ContactActions";
+import { Avatar, Button, Chip, ChipRow, RoleTag } from "@/components/ui";
 
 const ROLE_FILTERS = [...CONTACT_ROLES, "Core Team", "Archived"];
 
@@ -30,10 +24,55 @@ const EXCLUSIVE_ROLES = ["Contact", "Disciple"];
 const EMPTY_FILTERS = { contactType: "", source: "", metAt: "", gospelShared: "", prayed: "", saved: "" };
 const VIEW_MODE_KEY = "consolapp:peopleViewMode";
 
+// Heading-row buttons: icon only on phones, icon and word on laptops.
+const HEAD_BTN = "relative inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-[14px] font-semibold transition-colors md:px-4";
+const HEAD_BTN_IDLE = "bg-fill text-ink hover:bg-line-soft md:bg-white md:ring-1 md:ring-line md:hover:bg-tint";
+const HEAD_BTN_ON = "bg-brand-soft text-brand md:ring-1 md:ring-brand-light";
+
+const SEGMENT = "h-9 rounded-[10px] px-3.5 text-sm font-semibold transition-colors";
+
+// Filter-panel controls are 44px tall; 16px text on phones stops iOS zooming in.
+const FILTER_INPUT = "h-11 w-full min-w-0 rounded-[14px] bg-white pl-3 text-base font-normal text-ink ring-1 ring-inset ring-line placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand md:text-[15px]";
+
+const ICON_FILTERS = "M4 6h16M7 12h10M10 18h4";
+const ICON_EDIT = "M4 20h4l10-10-4-4L4 16zM13 7l4 4";
+const ICON_SELECT_SQUARE = "M9 11.5l2.5 2.5L20 5.5M19 12.5V18a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h9";
+const ICON_SELECT_ROUND = "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l3 3 5-6";
+const ICON_SEARCH = "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-3.5-3.5";
+const ICON_PEOPLE = "M9 11.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM3 19c.6-3.4 3-5 6-5s5.4 1.6 6 5M16.5 6.7a2.4 2.4 0 0 1 0 4.6M17 14c2.2.2 3.6 1.6 4 4";
+
+// 19px on phones, 17px beside a word on laptops.
+function Icon({ d, className = "", strokeWidth = 2 }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`h-[19px] w-[19px] shrink-0 md:h-[17px] md:w-[17px] ${className}`}
+    >
+      <path d={d} />
+    </svg>
+  );
+}
+const SEGMENT_ON = "bg-white text-ink shadow-[0_1px_3px_rgb(20_30_60/0.12)]";
+const SEGMENT_OFF = "text-muted hover:text-ink";
+
+const STATUS_MARKS = [
+  { key: "gospelShared", letter: "G", label: "Gospel shared" },
+  { key: "prayed", letter: "P", label: "Prayed" },
+  { key: "saved", letter: "S", label: "Saved" },
+];
+
 function MetAtCombo({ value, onChange, options }) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const boxRef = useRef(null);
+  const inputId = useId();
+  const listId = useId();
 
   useEffect(() => {
     const handler = (e) => {
@@ -74,37 +113,46 @@ function MetAtCombo({ value, onChange, options }) {
   };
 
   return (
-    <div className="flex flex-col gap-2" ref={boxRef}>
-      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Met At</label>
+    <div className="relative col-span-2 flex min-w-0 flex-col gap-1.5 md:flex-[1.3_1_190px]" ref={boxRef}>
+      <label htmlFor={inputId} className="text-sm font-semibold text-ink">Met at</label>
       <div className="relative">
         <input
+          id={inputId}
           type="text"
+          role="combobox"
+          aria-expanded={open && matches.length > 0}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          autoComplete="off"
           value={value}
           onChange={(e) => { onChange(e.target.value); setOpen(true); setHighlight(-1); }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
           placeholder="Search location…"
-          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 pr-8 text-sm text-gray-900 outline-none focus:border-blue-500"
+          className={`${FILTER_INPUT} pr-10`}
         />
         {value && (
           <button
             type="button"
+            aria-label="Clear location"
             onClick={() => { onChange(""); setOpen(false); }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+            className="absolute bottom-0.5 right-0.5 flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:text-ink"
           >
-            ×
+            <FiX size={15} aria-hidden="true" />
           </button>
         )}
         {open && matches.length > 0 && (
-          <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-56 overflow-y-auto">
+          <div id={listId} role="listbox" aria-label="Locations" className="absolute left-0 right-0 top-full z-20 mt-1.5 flex max-h-60 flex-col gap-0.5 overflow-y-auto rounded-[14px] bg-white p-1.5 text-[15px] shadow-float">
             {matches.map((m, i) => (
               <button
                 key={m}
                 type="button"
+                role="option"
+                aria-selected={i === highlight}
                 onMouseDown={(e) => { e.preventDefault(); pick(m); }}
                 onMouseEnter={() => setHighlight(i)}
-                className={`w-full text-left px-3 py-2 text-sm ${
-                  i === highlight ? "bg-blue-50 text-blue-700" : "text-gray-800 hover:bg-gray-50"
+                className={`min-h-10 shrink-0 rounded-[10px] px-2.5 py-[9px] text-left ${
+                  i === highlight ? "bg-brand-soft font-semibold text-brand-ink" : "text-ink hover:bg-tint"
                 }`}
               >
                 {m}
@@ -117,45 +165,51 @@ function MetAtCombo({ value, onChange, options }) {
   );
 }
 
-function FilterSelect({ label, value, onChange, options }) {
+function FilterSelect({ label, value, onChange, options, className = "" }) {
   return (
-    <div className="flex flex-col gap-2">
-      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</label>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 pr-9 text-sm text-gray-900 outline-none focus:border-blue-500 appearance-none"
-        >
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-        <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" width="12" height="12" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-          <path d="M5 8l5 5 5-5H5z" />
-        </svg>
-      </div>
-    </div>
+    <label className={`flex min-w-0 flex-col gap-1.5 text-sm font-semibold text-ink ${className}`}>
+      {label}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${FILTER_INPUT} pr-10`}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
+// useSearchParams needs a Suspense boundary above it.
 export default function People() {
+  return (
+    <Suspense>
+      <PeopleList />
+    </Suspense>
+  );
+}
+
+function PeopleList() {
   const { user, loading } = useRequireAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [people, setPeople] = useState([]);
   const [archived, setArchived] = useState([]);
   const [fetching, setFetching] = useState(true);
 
-  const [search, setSearch] = useState("");
+  // Home's search box hands its query over as ?q=
+  const [search, setSearch] = useState(() => searchParams.get("q") || "");
   const [activeRoles, setActiveRoles] = useState([]);
   const [showArchived, setShowArchived] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [selectMode, setSelectMode] = useState(false);
   const [viewMode, setViewMode] = useState(() => {
-    if (typeof window === "undefined") return "cards";
+    if (typeof window === "undefined") return "table";
     const saved = window.localStorage.getItem(VIEW_MODE_KEY);
-    return saved === "table" ? "table" : "cards";
+    return saved === "cards" ? "cards" : "table";
   });
 
   const toggleViewMode = () => {
@@ -222,6 +276,15 @@ export default function People() {
     [pool]
   );
 
+  // The chip counts are of everyone on the active list, whatever else is filtered.
+  const roleCounts = useMemo(() => {
+    const counts = { all: people.length };
+    for (const p of people) {
+      for (const r of p.roles || []) counts[r] = (counts[r] || 0) + 1;
+    }
+    return counts;
+  }, [people]);
+
   const q = search.trim().toLowerCase();
   const filtered = useMemo(() => pool.reduce((acc, p) => {
     if (activeRoles.length > 0 && !activeRoles.some((r) => (p.roles || []).includes(r))) return acc;
@@ -259,174 +322,258 @@ export default function People() {
 
   if (loading) return null;
 
+  const filtersOn = showFilters || activeFilterCount > 0;
+  const countLine = showArchived
+    ? `Showing ${filtered.length} archived`
+    : `Showing ${filtered.length} of ${pool.length}`;
+
+  const archiveText = selectedIds.size > 0 ? `Archive ${selectedIds.size} selected` : "Archive selected";
+  const archiveLabel = (
+    <>
+      <FiArchive size={18} aria-hidden="true" />
+      {archiving ? "…" : selectedIds.size > 0 && <span className="tabular-nums">{selectedIds.size}</span>}
+    </>
+  );
+
   return (
     <PageShell
-      title="My People"
+      title="My people"
       rightAction={
-        <div className="flex items-center gap-3">
+        <>
+          <div className="hidden md:block">
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search name, contact, notes, met at"
+              className="h-11 w-80 max-w-full rounded-[14px] [&>input]:text-[15px]"
+            />
+          </div>
+          <button
+            type="button"
+            aria-label="Filters"
+            aria-expanded={showFilters}
+            onClick={() => setShowFilters((v) => !v)}
+            className={`${HEAD_BTN} ${filtersOn ? HEAD_BTN_ON : HEAD_BTN_IDLE}`}
+          >
+            <Icon d={ICON_FILTERS} />
+            <span className="hidden md:inline">Filters</span>
+            {activeFilterCount > 0 && (
+              <span
+                aria-label={`${activeFilterCount} filters on`}
+                className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-xs font-bold text-white md:static"
+              >
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
           {selectMode ? (
-            <button onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }} className="text-xs font-semibold text-gray-500">
-              Cancel
-            </button>
+            <>
+              <Button variant="outline" onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}>
+                Cancel
+              </Button>
+              {/* Laptop: the action sits with the other heading buttons. Phones get the floating bar below. */}
+              <Button className="hidden md:inline-flex" onClick={handleBulkArchive} disabled={selectedIds.size === 0 || archiving} title={archiveText} aria-label={archiveText}>
+                {archiveLabel}
+              </Button>
+            </>
           ) : (
             <>
-              <button onClick={() => router.push("/bulk-edit")} className="flex flex-col items-center text-gray-600 active:opacity-70">
-                <FiGrid size={18} />
-                <span className="text-[10px] font-semibold mt-0.5">Bulk Edit</span>
+              <button type="button" aria-label="Bulk edit" onClick={() => router.push("/bulk-edit")} className={`${HEAD_BTN} ${HEAD_BTN_IDLE}`}>
+                <Icon d={ICON_EDIT} />
+                <span className="hidden md:inline">Bulk edit</span>
               </button>
-              <button onClick={() => setSelectMode(true)} className="flex flex-col items-center text-gray-600 active:opacity-70">
-                <FiCheckSquare size={18} />
-                <span className="text-[10px] font-semibold mt-0.5">Select</span>
+              <button type="button" aria-label="Select people" onClick={() => setSelectMode(true)} className={`${HEAD_BTN} ${HEAD_BTN_IDLE}`}>
+                <Icon d={ICON_SELECT_ROUND} className="md:hidden" />
+                <Icon d={ICON_SELECT_SQUARE} className="hidden md:block" />
+                <span className="hidden md:inline">Select</span>
               </button>
             </>
           )}
-        </div>
+        </>
       }
     >
-      {/* Search + filter toggle */}
-      <div className="flex gap-2 mb-3 items-start">
-        <div className="flex-1">
-          <SearchBar value={search} onChange={setSearch} placeholder="Search name, contact, notes, met at…" />
+      <div className="flex flex-col gap-3 md:gap-[18px]">
+        {/* Phone: search sits under the heading */}
+        <div className="md:hidden">
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="Search name, contact, notes"
+            className="h-12 rounded-2xl"
+          />
         </div>
-        <button
-          onClick={toggleViewMode}
-          title={viewMode === "cards" ? "Switch to table view" : "Switch to card view"}
-          className="shrink-0 w-11 h-11 rounded-xl border bg-white border-gray-200 text-gray-600 flex items-center justify-center mb-4"
-        >
-          {viewMode === "cards" ? <FiList size={17} /> : <FiGrid size={17} />}
-        </button>
-        <button
-          onClick={() => setShowFilters((v) => !v)}
-          className={`relative shrink-0 w-11 h-11 rounded-xl border flex items-center justify-center transition-colors mb-4 ${
-            showFilters || activeFilterCount > 0
-              ? "bg-blue-50 border-blue-300 text-blue-600"
-              : "bg-white border-gray-200 text-gray-600"
-          }`}
-        >
-          <FiSliders size={17} />
-          {activeFilterCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
-      </div>
 
-      {/* Filter panel */}
-      {showFilters && (
-        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5 mb-4 space-y-5">
-
-          <div className="grid grid-cols-2 gap-4">
+        {/* Filter panel */}
+        {showFilters && (
+          <section
+            aria-label="Filters"
+            className="grid grid-cols-2 items-start gap-3.5 rounded-3xl bg-white px-5 pb-5 pt-[18px] shadow-card md:flex md:flex-wrap"
+          >
             <FilterSelect
-              label="Contact Type"
+              label="Contact type"
+              className="md:flex-[1_1_140px]"
               value={filters.contactType}
               onChange={(v) => setFilter("contactType", v)}
               options={[{ value: "", label: "All" }, ...CONTACT_TYPES.map((t) => ({ value: t, label: t }))]}
             />
             <FilterSelect
               label="Source"
+              className="md:flex-[1.3_1_180px]"
               value={filters.source}
               onChange={(v) => setFilter("source", v)}
               options={[{ value: "", label: "All" }, ...SOURCES.map((s) => ({ value: s, label: s }))]}
             />
-          </div>
 
-          <MetAtCombo value={filters.metAt} onChange={(v) => setFilter("metAt", v)} options={uniqueMetAt} />
+            <MetAtCombo value={filters.metAt} onChange={(v) => setFilter("metAt", v)} options={uniqueMetAt} />
 
-          <div className="border-t border-gray-100" />
-
-          <div className="grid grid-cols-3 gap-3">
             <FilterSelect
-              label="Gospel Shared"
+              label="Gospel shared"
+              className="md:flex-[0_1_118px]"
               value={filters.gospelShared}
               onChange={(v) => setFilter("gospelShared", v)}
               options={BOOL_OPTIONS}
             />
             <FilterSelect
               label="Prayed"
+              className="md:flex-[0_1_118px]"
               value={filters.prayed}
               onChange={(v) => setFilter("prayed", v)}
               options={BOOL_OPTIONS}
             />
             <FilterSelect
               label="Saved"
+              className="md:flex-[0_1_118px]"
               value={filters.saved}
               onChange={(v) => setFilter("saved", v)}
               options={BOOL_OPTIONS}
             />
+
+            {activeFilterCount > 0 && (
+              <div className="col-span-full -mb-2 -mt-1.5 flex md:basis-full">
+                <button
+                  type="button"
+                  onClick={() => setFilters(EMPTY_FILTERS)}
+                  className="min-h-11 px-1 text-sm font-semibold text-danger-ink hover:underline"
+                >
+                  Clear filters
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Role chips, and on laptop the view switch */}
+        <div className="flex items-center justify-between gap-3 md:flex-wrap">
+          <ChipRow label="Filter by role" className="min-w-0 flex-1 md:flex-wrap md:overflow-visible">
+            <Chip active={activeRoles.length === 0} onClick={() => setActiveRoles([])} className="md:h-[38px]">
+              All {roleCounts.all}
+            </Chip>
+            {ROLE_FILTERS.map((f) => {
+              const isArchived = f === "Archived";
+              const active = isArchived ? showArchived : activeRoles.includes(f);
+              return (
+                <Chip
+                  key={f}
+                  active={active}
+                  onClick={() => toggleRole(f)}
+                  className={`md:h-[38px] ${isArchived && active ? "bg-ink-2!" : ""}`}
+                >
+                  {isArchived ? f : `${f} ${roleCounts[f] || 0}`}
+                </Chip>
+              );
+            })}
+          </ChipRow>
+          <div role="group" aria-label="View" className="hidden shrink-0 gap-1 rounded-[14px] bg-fill p-1 md:flex">
+            <button
+              type="button"
+              aria-pressed={viewMode === "table"}
+              onClick={() => { if (viewMode !== "table") toggleViewMode(); }}
+              className={`${SEGMENT} ${viewMode === "table" ? SEGMENT_ON : SEGMENT_OFF}`}
+            >
+              Table
+            </button>
+            <button
+              type="button"
+              aria-pressed={viewMode === "cards"}
+              onClick={() => { if (viewMode !== "cards") toggleViewMode(); }}
+              className={`${SEGMENT} ${viewMode === "cards" ? SEGMENT_ON : SEGMENT_OFF}`}
+            >
+              Cards
+            </button>
           </div>
-
-          {activeFilterCount > 0 && (
-            <button
-              onClick={() => setFilters(EMPTY_FILTERS)}
-              className="text-xs font-semibold text-red-500"
-            >
-              Clear filters
-            </button>
-          )}
         </div>
-      )}
 
-      {/* Role chips */}
-      <div className="flex gap-2 flex-wrap mb-4">
-        {ROLE_FILTERS.map((f) => {
-          const isArchived = f === "Archived";
-          const active = isArchived ? showArchived : activeRoles.includes(f);
-          const activeColor = isArchived
-            ? "bg-gray-700 text-white border-transparent"
-            : `${ROLE_COLORS[f] || "bg-blue-500"} text-white border-transparent`;
-          return (
-            <button
-              key={f}
-              onClick={() => toggleRole(f)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all shadow-sm ${
-                active ? activeColor : "bg-white text-gray-600 border-gray-200"
-              }`}
-            >
-              {f}
-            </button>
-          );
-        })}
+        {fetching ? (
+          <div role="status" className="flex min-h-[360px] items-center justify-center">
+            <span aria-hidden="true" className="h-7 w-7 animate-spin rounded-full border-[3px] border-line border-t-brand" />
+            <span className="sr-only">Loading</span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center gap-1.5 rounded-3xl bg-white px-6 py-14 text-center ring-1 ring-line-soft">
+            <span aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-[18px] bg-brand-soft text-brand">
+              <Icon d={hasAnyFilter || q ? ICON_SEARCH : ICON_PEOPLE} className="h-[26px]! w-[26px]!" strokeWidth={1.9} />
+            </span>
+            <p className="mt-1.5 text-[17px] font-bold tracking-[-0.015em]">
+              No people found{hasAnyFilter ? " matching your filters" : ""}.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Phone is always the list. Laptop is the table, or the same cards in a grid. */}
+            <div className={viewMode === "table" ? "md:hidden" : "md:grid md:grid-cols-2 md:gap-3 xl:grid-cols-3"}>
+              {filtered.map((p) => (
+                <PersonCard
+                  key={p.id}
+                  person={p}
+                  onSelect={selectMode ? toggleSelect : undefined}
+                  selected={selectedIds.has(p.id)}
+                />
+              ))}
+            </div>
+            {viewMode === "table" && (
+              <div className="hidden md:block">
+                <PeopleTable
+                  people={filtered}
+                  onRowClick={(p) => router.push(`/person/${p.id}`)}
+                  selectMode={selectMode}
+                  selectedIds={selectedIds}
+                  onToggleSelect={toggleSelect}
+                />
+              </div>
+            )}
+
+            <div className={`flex-wrap items-center gap-4 text-[13px] text-muted md:flex ${selectMode ? "flex" : "hidden"}`}>
+              {viewMode === "table" && (
+                <span className="hidden flex-wrap items-center gap-4 md:flex">
+                  <span className="font-semibold text-ink">Status</span>
+                  {STATUS_MARKS.map((m) => (
+                    <span key={m.key} className="inline-flex items-center gap-1.5">
+                      <span aria-hidden="true" className="flex h-5.5 w-5.5 items-center justify-center rounded-lg bg-brand text-[11.5px] font-bold text-white">{m.letter}</span>
+                      {m.label}
+                    </span>
+                  ))}
+                </span>
+              )}
+              <span className="ml-auto">
+                {selectMode && `${selectedIds.size} selected · `}{countLine}
+              </span>
+            </div>
+          </>
+        )}
       </div>
-
-      {fetching ? (
-        <div className="flex justify-center py-12">
-          <div className="w-6 h-6 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <p className="text-center text-gray-600 text-sm py-12">
-          No people found{hasAnyFilter ? " matching your filters" : ""}.
-        </p>
-      ) : viewMode === "table" ? (
-        <PeopleTable
-          people={filtered}
-          onRowClick={(p) => router.push(`/person/${p.id}`)}
-          selectMode={selectMode}
-          selectedIds={selectedIds}
-          onToggleSelect={toggleSelect}
-        />
-      ) : (
-        <div className="space-y-2.5">
-          {filtered.map((p) => (
-            <PersonCard
-              key={p.id}
-              person={p}
-              onSelect={selectMode ? toggleSelect : undefined}
-              selected={selectedIds.has(p.id)}
-            />
-          ))}
-        </div>
-      )}
 
       {/* Bulk archive action bar */}
       {selectMode && (
-        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-40">
+        <div className="fixed bottom-28 left-1/2 z-40 -translate-x-1/2 md:hidden">
           <button
+            type="button"
             onClick={handleBulkArchive}
             disabled={selectedIds.size === 0 || archiving}
-            className="flex items-center gap-2 px-6 py-3 bg-gray-800 disabled:opacity-40 text-white text-sm font-semibold rounded-2xl shadow-xl transition-opacity"
+            title={archiveText}
+            aria-label={archiveText}
+            className="flex h-12 items-center gap-2 whitespace-nowrap rounded-2xl bg-navy px-[18px] text-sm font-semibold text-white shadow-float transition-opacity disabled:opacity-50"
           >
-            {archiving ? "Archiving…" : `Archive ${selectedIds.size > 0 ? `(${selectedIds.size})` : ""}`}
+            {archiveLabel}
           </button>
         </div>
       )}
@@ -434,77 +581,96 @@ export default function People() {
   );
 }
 
+const ROW_COLS = "grid-cols-[40px_minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_170px_96px]";
+const ROW_COLS_SELECT = "grid-cols-[28px_40px_minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_170px_96px]";
+
 function PeopleTable({ people, onRowClick, selectMode, selectedIds, onToggleSelect }) {
   if (people.length === 0) return null;
+  const row = `grid items-center gap-x-3.5 px-3.5 ${selectMode ? ROW_COLS_SELECT : ROW_COLS}`;
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-          <tr>
-            {selectMode && <th className="px-3 py-2 w-8"></th>}
-            <th className="px-3 py-2 text-left font-semibold">Name</th>
-            <th className="px-3 py-2 text-left font-semibold">Contact</th>
-            <th className="px-3 py-2 text-left font-semibold">Type</th>
-            <th className="px-3 py-2 text-left font-semibold">Source</th>
-            <th className="px-3 py-2 text-left font-semibold">Met At</th>
-            <th className="px-3 py-2 text-left font-semibold">Roles</th>
-            <th className="px-3 py-2 text-left font-semibold">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {people.map((p) => {
-            return (
-              <tr
-                key={p.id}
-                onClick={() => (selectMode ? onToggleSelect(p) : onRowClick(p))}
-                className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
-              >
-                {selectMode && (
-                  <td className="px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(p.id)}
-                      onChange={() => onToggleSelect(p)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </td>
-                )}
-                <td className="px-3 py-2 font-semibold text-gray-900 whitespace-nowrap">
-                  {p.name}
-                  {p._matchedField && (
-                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">
-                      matched: {p._matchedField}
-                    </span>
+    <div className="overflow-x-auto">
+      <div role="table" aria-label="People" className={`flex flex-col gap-0.5 ${selectMode ? "min-w-[900px]" : "min-w-[860px]"}`}>
+        <div role="row" className={`${row} h-[30px] text-[13px] font-bold`}>
+          {selectMode && <span role="columnheader"><span className="sr-only">Selected</span></span>}
+          <span role="columnheader" />
+          <span role="columnheader">Name</span>
+          <span role="columnheader">Contact</span>
+          <span role="columnheader">Source</span>
+          <span role="columnheader">Met at</span>
+          <span role="columnheader">Roles</span>
+          <span role="columnheader">Status</span>
+        </div>
+        {people.map((p, i) => {
+          const isSelected = selectMode && selectedIds.has(p.id);
+          return (
+            <div
+              key={p.id}
+              role="row"
+              onClick={() => (selectMode ? onToggleSelect(p) : onRowClick(p))}
+              className={`${row} min-h-[62px] cursor-pointer rounded-2xl transition-colors hover:bg-brand-soft ${
+                isSelected ? "bg-role-contact" : i % 2 === 0 ? "bg-tint" : "bg-white"
+              }`}
+            >
+              {selectMode && (
+                <span role="cell" className="relative inline-flex h-[22px] w-[22px] items-center justify-center">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${p.name}`}
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(p)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-[22px] w-[22px] cursor-pointer appearance-none rounded-[7px] bg-white ring-[1.5px] ring-inset ring-muted checked:bg-brand checked:ring-brand"
+                  />
+                  {isSelected && (
+                    <svg aria-hidden="true" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute text-white">
+                      <path d="M5 12.5l4.5 4.5L19 7.5" />
+                    </svg>
                   )}
-                </td>
-                <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5">
-                    {p.contact}
-                    <ContactActions contactType={p.contactType} contact={p.contact} size={12} />
+                </span>
+              )}
+              <span role="cell" className="flex">
+                <Avatar name={p.name} size="sm" className="h-10! w-10! rounded-[13px]!" />
+              </span>
+              <span role="cell" className={`min-w-0 ${p._matchedField ? "py-2" : ""}`}>
+                {/* A real button so the row can be opened from the keyboard; the click is handled by the row. */}
+                <button type="button" className="block max-w-full truncate text-left font-semibold tracking-[-0.01em]">
+                  {p.name}
+                </button>
+                {p._matchedField && (
+                  <span className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full bg-warn-soft px-2 text-xs font-semibold text-warn-ink">
+                    matched: {p._matchedField}
                   </span>
-                </td>
-                <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{p.contactType || "—"}</td>
-                <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{p.source || "—"}</td>
-                <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{p.metAt || "—"}</td>
-                <td className="px-3 py-2 whitespace-nowrap">
-                  <div className="flex gap-1 flex-wrap">
-                    {(p.roles || []).map((r) => (
-                      <span key={r} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-semibold">
-                        {r}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
-                  {p.gospelShared && <span className="mr-1">G</span>}
-                  {p.prayed && <span className="mr-1">P</span>}
-                  {p.saved && <span className="mr-1">S</span>}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                )}
+              </span>
+              <span role="cell" className="min-w-0">
+                <span className="flex min-w-0">
+                  <ContactHandle contactType={p.contactType} contact={p.contact} />
+                </span>
+                {p.contactType ? <ContactTypeTag contactType={p.contactType} className="mt-1" /> : <span className="block text-[13px] text-muted">—</span>}
+              </span>
+              <span role="cell" className="min-w-0 truncate">{p.source || "—"}</span>
+              <span role="cell" className="min-w-0 truncate">{p.metAt || "—"}</span>
+              <span role="cell" className="flex flex-wrap gap-1 py-1">
+                {(p.roles || []).map((r) => <RoleTag key={r} role={r} />)}
+              </span>
+              <span role="cell" className="flex gap-1">
+                {STATUS_MARKS.map((m) => (
+                  <span
+                    key={m.key}
+                    role="img"
+                    aria-label={p[m.key] ? m.label : `Not ${m.label.toLowerCase()}`}
+                    className={`flex h-6.5 w-6.5 items-center justify-center rounded-[9px] text-xs font-bold ${
+                      p[m.key] ? "bg-brand text-white" : "bg-line-soft text-muted"
+                    }`}
+                  >
+                    {m.letter}
+                  </span>
+                ))}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

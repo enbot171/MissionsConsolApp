@@ -2,25 +2,24 @@
 
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { FaHome, FaPlus, FaUsers, FaLayerGroup } from "react-icons/fa";
-import { FiBell, FiClock, FiCalendar, FiClipboard, FiFileText, FiZap, FiMoreHorizontal, FiSettings } from "react-icons/fi";
+import { FiHome, FiPlus, FiUsers, FiLayers, FiBell, FiClock, FiCalendar, FiClipboard, FiFileText, FiZap, FiMoreHorizontal, FiSettings } from "react-icons/fi";
 import { useFollowUpCount } from "@/context/FollowUpCountContext";
 
 // The five slots go to what gets touched daily. Everything else is reference
 // material and lives one tap deeper, behind More.
 const tabs = [
-  { path: "/",            icon: FaHome,  label: "Home" },
-  { path: "/people",      icon: FaUsers, label: "People" },
-  { path: "/add-contact", icon: FaPlus,  label: null, fab: true },
+  { path: "/",            icon: FiHome,  label: "Home" },
+  { path: "/people",      icon: FiUsers, label: "People" },
+  { path: "/add-contact", icon: FiPlus,  label: null, fab: true },
   { path: "/meetings",    icon: FiClock, label: "Meetings" },
 ];
 
 const moreItems = [
   { path: "/follow-ups", icon: FiBell,       label: "Follow-ups", badge: true },
-  { path: "/groups",     icon: FaLayerGroup, label: "Groups" },
+  { path: "/groups",     icon: FiLayers, label: "Groups" },
   { path: "/calendar",   icon: FiCalendar,   label: "Calendar" },
   { path: "/summary",    icon: FiClipboard,  label: "Summary" },
-  { path: "/report",     icon: FiFileText,  label: "Weekly Report" },
+  { path: "/report",     icon: FiFileText,  label: "Weekly report" },
   { path: "/testimonies", icon: FiZap,      label: "Testimonies" },
   { path: "/settings",   icon: FiSettings,   label: "Settings" },
 ];
@@ -36,33 +35,44 @@ export default function BottomNav() {
 
   const go = (path) => { setSheet(false); router.push(path); };
 
+  const badgeText = count > 99 ? "99+" : count;
+  const tabClass = (active) =>
+    `relative flex h-13 flex-1 flex-col items-center justify-center gap-0.5 rounded-[18px] text-[11.5px] transition-colors ${
+      active ? "bg-brand-soft font-semibold text-brand" : "font-medium text-muted"
+    }`;
+
   return (
     <>
       {sheet && (
         <div className="fixed inset-0 z-60 md:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setSheet(false)} />
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-xl pb-8 pt-3 px-4">
-            <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto mb-4" />
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="absolute inset-0 h-full w-full bg-navy/45"
+            onClick={() => setSheet(false)}
+          />
+          <div role="dialog" aria-modal="true" aria-label="More" className="absolute inset-x-0 bottom-0 rounded-t-[28px] bg-white px-5 pb-8 pt-2.5 shadow-float">
+            <div aria-hidden="true" className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-line" />
             <div className="grid grid-cols-2 gap-2">
               {moreItems.map(({ path, icon: Icon, label, badge }) => {
                 const active = isActive(path);
                 return (
                   <button
                     key={path}
+                    type="button"
                     onClick={() => go(path)}
-                    className={`flex items-center gap-3 px-3 py-3 rounded-2xl border transition-colors ${
-                      active
-                        ? "bg-blue-50 border-blue-200 text-blue-600"
-                        : "bg-white border-gray-100 text-gray-700 active:bg-gray-50"
+                    aria-current={active ? "page" : undefined}
+                    className={`flex min-h-14 items-center gap-3 rounded-2xl px-3 text-left transition-colors ${
+                      active ? "bg-brand-soft text-brand" : "bg-tint text-ink active:bg-fill"
                     }`}
                   >
-                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${active ? "bg-blue-100" : "bg-gray-50"}`}>
-                      <Icon size={15} />
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${active ? "bg-white" : "bg-white text-ink-2"}`}>
+                      <Icon size={16} />
                     </span>
-                    <span className="text-sm font-semibold">{label}</span>
+                    <span className="min-w-0 flex-1 text-sm font-semibold">{label}</span>
                     {badge && count > 0 && (
-                      <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
-                        {count > 99 ? "99+" : count}
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-warn px-1.5 text-[11px] font-bold text-white">
+                        {badgeText}
                       </span>
                     )}
                   </button>
@@ -73,55 +83,59 @@ export default function BottomNav() {
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t-2 border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] md:hidden">
-        <div className="flex items-end justify-around px-2 pb-2 pt-1 max-w-lg mx-auto">
-          {tabs.map(({ path, icon: Icon, label, fab }) => {
-            const active = isActive(path);
+      <nav aria-label="Main" className="fixed inset-x-4 bottom-5 z-50 mx-auto flex max-w-md items-center gap-1 rounded-3xl bg-white p-1.5 shadow-float md:hidden">
+        {tabs.map(({ path, icon: Icon, label, fab }) => {
+          const active = isActive(path);
 
-            if (fab) {
-              return (
-                <button
-                  key={path}
-                  onClick={() => router.push(path)}
-                  className="relative -top-4 w-14 h-14 rounded-2xl bg-blue-600 shadow-lg shadow-blue-600/35 flex items-center justify-center active:scale-95 transition-transform"
-                >
-                  <Icon size={22} className="text-white" />
-                </button>
-              );
-            }
-
+          if (fab) {
             return (
               <button
                 key={path}
+                type="button"
                 onClick={() => router.push(path)}
-                className="relative flex flex-col items-center gap-1 py-2 px-2 rounded-xl transition-colors"
+                aria-label="Add contact"
+                className="flex h-13 w-13 shrink-0 items-center justify-center rounded-[18px] bg-brand text-white shadow-brand transition-transform active:scale-95"
               >
-                <Icon size={22} className={active ? "text-blue-600" : "text-gray-600"} />
-                <span className={`text-[10px] font-semibold whitespace-nowrap ${active ? "text-blue-600" : "text-gray-600"}`}>
-                  {label}
-                </span>
-                <span className={`w-1 h-1 rounded-full transition-all ${active ? "bg-blue-600" : "bg-transparent"}`} />
+                <Icon size={24} strokeWidth={2.3} />
               </button>
             );
-          })}
+          }
 
-          <button
-            onClick={() => setSheet(true)}
-            className="relative flex flex-col items-center gap-1 py-2 px-2 rounded-xl transition-colors"
-          >
-            <FiMoreHorizontal size={22} className={moreActive ? "text-blue-600" : "text-gray-600"} />
-            {/* Follow-ups lives in the sheet now — surface its count so overdue
-                work is still visible without opening it. */}
-            {count > 0 && (
-              <span className="absolute top-0.5 right-0 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
-                {count > 99 ? "99+" : count}
-              </span>
-            )}
-            <span className={`text-[10px] font-semibold ${moreActive ? "text-blue-600" : "text-gray-600"}`}>More</span>
-            <span className={`w-1 h-1 rounded-full transition-all ${moreActive ? "bg-blue-600" : "bg-transparent"}`} />
-          </button>
-        </div>
-      </div>
+          return (
+            <button
+              key={path}
+              type="button"
+              onClick={() => router.push(path)}
+              aria-current={active ? "page" : undefined}
+              className={tabClass(active)}
+            >
+              <Icon size={20} />
+              {label}
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={() => setSheet(true)}
+          aria-haspopup="dialog"
+          aria-expanded={sheet}
+          className={tabClass(moreActive)}
+        >
+          <FiMoreHorizontal size={20} />
+          More
+          {/* Follow-ups lives in the sheet, so its count is surfaced here:
+              overdue work stays visible without opening it. */}
+          {count > 0 && (
+            <span
+              aria-label={`${count} follow-ups due`}
+              className="absolute right-3 top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-warn px-1 text-[11px] font-bold text-white"
+            >
+              {badgeText}
+            </span>
+          )}
+        </button>
+      </nav>
     </>
   );
 }

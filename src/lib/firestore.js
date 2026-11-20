@@ -1,4 +1,5 @@
 import {
+  runTransaction,
   collection,
   doc,
   setDoc,
@@ -463,4 +464,30 @@ export const getAttendanceByCG = async (cgId) => {
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
+// ── Weekly report overrides ───────────────────────────────────────────────────
+// One document per team per week. `weekStart` is the Monday as a local
+// "YYYY-MM-DD" string (toDateInput), never toISOString: in UTC+8 that would name
+// the Sunday before.
+
+const reportOverridesRef = (teamId, weekStart) => doc(db, "reportOverrides", `${teamId}_${weekStart}`);
+
+export const getReportOverrides = async (teamId, weekStart) => {
+  const snap = await getDoc(reportOverridesRef(teamId, weekStart));
+  return snap.exists() ? snap.data().cells || {} : {};
+};
+
+// Saves inside a transaction: re-reads the cells as they are now, lets `merge`
+// apply this person's changes on top, and writes the result. Two people saving
+// the same week keep each other's cells. Still a whole-map write (not a merging
+// one), so cells `merge` drops are really removed. Returns the saved cells.
+export const saveReportOverrides = async (teamId, weekStart, merge, uid) => {
+  const ref = reportOverridesRef(teamId, weekStart);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    const cells = merge(snap.exists() ? snap.data().cells || {} : {});
+    tx.set(ref, { teamId, weekStart, cells, updatedBy: uid, updatedAt: serverTimestamp() });
+    return cells;
+  });
 };
